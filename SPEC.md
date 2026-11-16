@@ -14,6 +14,10 @@ Final v1.0 · 依使用者提供的開發規格建立，以下包含功能要求
 - Remote MCP 使用官方 SDK `WebStandardStreamableHTTPServerTransport`，`sessionIdGenerator: undefined`，POST-only；CORS 允許 Content-Type、Authorization、Mcp-Method、Mcp-Name 與 MCP-Protocol-Version。
 - 需求原列 MCP `2026-07-28`；目前鎖定 SDK 協商最高 `2025-11-25`。實作無狀態傳輸，不聲稱尚不受 SDK 支援的版本。
 
+## 入口與導覽
+
+首頁優先顯示 Google 登入畫面，登入後預設進入公布欄。未設定 Supabase 的預覽環境提供明確標示的示例入口。主功能以固定底部 SVG 圖示列切換，保留精簡文字標籤與目前頁面提示，支援手機安全區域。登入頁使用暖紅金色的跨職類交流主視覺。
+
 ## 五大功能
 
 ### 公布欄

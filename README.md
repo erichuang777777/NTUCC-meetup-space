@@ -12,7 +12,7 @@ cp .env.example .env
 npm run dev
 ```
 
-未設定 Supabase 時會進入**示例預覽模式**，所有示例卡片都有整體模式提示，不會寫入資料。`npm run dev` 只提供前端；需要 API 時用 Netlify CLI 的 `netlify dev`，並將 `APP_ORIGIN` 設為實際本機來源（例如 `http://localhost:8888`）。
+首頁先顯示登入畫面，Google 登入後預設進入公布欄，功能導覽以底部 SVG 圖示列呈現。未設定 Supabase 時可透過登入頁的「預覽介面」進入**示例預覽模式**，所有示例卡片都有整體模式提示，不會寫入資料。`npm run dev` 只提供前端；需要 API 時用 Netlify CLI 的 `netlify dev`，並將 `APP_ORIGIN` 設為實際本機來源（例如 `http://localhost:8888`）。
 
 ## Supabase 設定
 

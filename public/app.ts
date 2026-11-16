@@ -22,7 +22,7 @@ const read = async (q: any) => {
 };
 let user: any = null,
   profile: any = null,
-  page = "stage",
+  page = "announcements",
   filter = "全部",
   search = "",
   activeSession: any = null,
@@ -33,13 +33,56 @@ let user: any = null,
   mySpaces: any[] = [],
   currentSpace: any = null;
 let demo = !client;
+let demoEntered = false;
 const navs = [
-  ["stage", "◈", "展示舞台"],
-  ["announcements", "▤", "公布欄"],
-  ["registration", "▦", "活動報名"],
-  ["pain", "◇", "痛點許願池"],
-  ["workspace", "▧", "我的工作空間"],
+  ["announcements", "公布欄"],
+  ["stage", "展示舞台"],
+  ["registration", "活動報名"],
+  ["pain", "痛點許願池"],
+  ["workspace", "我的工作空間"],
 ];
+const iconPaths: Record<string, string> = {
+  announcements:
+    '<path d="M4 10v4h4l9 4V6l-9 4H4Z"/><path d="m8 14 1 6h3l-2-5M20 9v6"/>',
+  stage:
+    '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="m10 8 5 3-5 3V8ZM8 21l4-4 4 4"/>',
+  registration:
+    '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 5 3 3 5-5"/>',
+  pain: '<path d="M9 18h6m-6 3h6M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/>',
+  workspace:
+    '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
+  admin:
+    '<path d="M12 3 4 7v6c0 4 8 8 8 8s8-4 8-8V7l-8-4Z"/><path d="m8 12 3 3 5-5"/>',
+};
+function icon(id: string) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[id] ?? iconPaths.announcements}</svg>`;
+}
+async function signIn() {
+  if (!client) throw Error("尚未連接登入服務，可先使用下方的介面預覽。");
+  const { error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: location.origin },
+  });
+  if (error) throw error;
+}
+function loginView() {
+  $("#app").innerHTML =
+    `<main class="login-page"><div class="login-art" role="img" aria-label="臺大癌醫同仁共同交流 AI 與工作經驗的插畫"></div><section class="login-card"><a class="login-brand" href="/">${icon("stage")} NTUCC <span>MEETUP SPACES</span></a><p class="eyebrow">CONNECT · SHARE · INSPIRE</p><h1>讓每個小實驗，<br>成為相遇的起點。</h1><p class="login-description">臺大癌醫內部交流與 AI 展示空間<br>分享實戰、聊聊踩坑，一起讓好想法發生。</p><button id="login-google" class="login-google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 12.2c0-.7-.1-1.4-.2-2.2H12v4h5a4.5 4.5 0 0 1-5 3.8 5.8 5.8 0 1 1 0-11.6c1.5 0 2.7.5 3.7 1.4l2.9-2.8A10 10 0 1 0 12 22c5.8 0 9-4 9-9.8Z"/></svg>使用 Google 帳號登入<span>↗</span></button><p class="login-note">首次登入後，請輸入院內通關密語。<br>登入後將進入公布欄，查看最新活動與提醒。</p>${demo ? '<button id="demo-enter" class="login-demo">預覽介面（示例資料） →</button>' : ""}<div class="login-footer">NTUCC · 臺大癌醫<br>帶上你的想法，和同仁一起交流。</div></section></main>`;
+  $("#login-google").onclick = () => void run(signIn);
+  if (demo)
+    $("#demo-enter").onclick = () =>
+      void run(async () => {
+        demoEntered = true;
+        page = "announcements";
+        history.replaceState(
+          null,
+          "",
+          location.pathname + location.search + "#announcements",
+        );
+        await load();
+        render();
+      });
+}
 const LIST =
   "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,votes,vibe_counts,slot_order,session_id,visibility,created_at";
 const demoSpaces = [
@@ -204,9 +247,13 @@ async function load() {
   activeSession = results[3][0] ?? null;
 }
 function render() {
-  const title = navs.find((n) => n[0] === page)?.[2] ?? "管理後台";
+  if (!user && !demoEntered) {
+    loginView();
+    return;
+  }
+  const title = navs.find((n) => n[0] === page)?.[1] ?? "管理後台";
   $("#app").innerHTML =
-    `<div class="shell"><aside class="sidebar"><a href="#stage" class="brand"><span class="brand-icon">✳</span><br>NTUCC<br>Meetup Spaces<small>CONNECT · SHARE · INSPIRE</small></a><nav class="nav">${navs.map(([id, icon, label]) => `<button data-nav="${id}" class="${page === id ? "active" : ""}"><span>${icon}</span>${label}</button>`).join("")}${profile?.role === "admin" ? `<button data-nav="admin" class="${page === "admin" ? "active" : ""}"><span>⚙</span>管理後台</button>` : ""}</nav><div class="sidebar-foot">一個小實驗，一次新連結。<br>臺大癌醫內部交流與 AI 展示空間<br><span>NTUCC · INTERNAL COMMUNITY</span></div></aside><main class="main"><header class="topbar"><div class="breadcrumb">Meetup Spaces　/　<b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "訪客瀏覽"}</span><button id="auth" class="${user ? "secondary" : ""}">${user ? "登出" : "Google 登入　↗"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main></div>`;
+    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="breadcrumb"><b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id ? 'aria-current="page"' : ""} class="${page === id ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -217,19 +264,24 @@ function render() {
         render();
       }),
   );
+  $(".app-brand").onclick = (e) => {
+    e.preventDefault();
+    page = "announcements";
+    location.hash = page;
+    render();
+  };
   $("#auth").onclick = () =>
-    run(async () => {
-      if (!client) throw Error("請先設定 Supabase 環境變數");
+    void run(async () => {
       if (user) {
-        await client.auth.signOut();
-        location.reload();
-      } else {
-        const { error } = await client.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: location.origin },
-        });
+        const { error } = await client!.auth.signOut();
         if (error) throw error;
       }
+      user = null;
+      profile = null;
+      demoEntered = false;
+      page = "announcements";
+      history.replaceState(null, "", location.pathname + location.search);
+      render();
     });
   if (user && !profile?.passcode_verified)
     $("#passcode-form").onsubmit = (e) => {
@@ -1098,12 +1150,12 @@ async function refreshProfile() {
 }
 async function init() {
   try {
-    page = location.hash.slice(1) || "stage";
+    page = "announcements";
     if (client) {
       user = (await client.auth.getSession()).data.session?.user ?? null;
       if (user) await refreshProfile();
     }
-    await load();
+    if (user) await load();
     render();
     if (client && profile?.passcode_verified) {
       client
