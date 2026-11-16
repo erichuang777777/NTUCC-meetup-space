@@ -1,0 +1,944 @@
+/* One quiet surface. Borders separate content; boxes are reserved for menus and inputs. */
+:root {
+  background: #fff;
+  color: #263c32;
+  --line: #e8ece8;
+  --green: #245c48;
+}
+body {
+  background: #fff;
+}
+h1 {
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.6px;
+  line-height: 1.5;
+}
+h2 {
+  font-size: 16px;
+  font-weight: 600;
+}
+h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.content {
+  max-width: 1100px;
+  padding: 32px 40px 100px;
+}
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 24px;
+}
+.page-heading h1 {
+  margin: 0;
+}
+.topbar {
+  height: 64px;
+  background: #fff;
+  padding: 0 max(24px, calc((100vw - 1020px) / 2));
+  border-bottom: 1px solid var(--line);
+  gap: 20px;
+}
+.top-actions {
+  margin-left: auto;
+}
+.app-brand {
+  font-size: 15px;
+  font-weight: 650;
+  gap: 8px;
+}
+.app-brand svg {
+  width: 25px;
+  height: 25px;
+}
+.app-brand small {
+  font-size: 9px;
+  letter-spacing: 0.4px;
+}
+button {
+  padding: 9px 14px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 550;
+  box-shadow: none;
+}
+.secondary,
+.ghost,
+.text-button {
+  background: transparent;
+  border: 0;
+  color: #68776b;
+}
+.secondary:hover,
+.ghost:hover,
+.text-button:hover {
+  background: #f5f7f4;
+  color: var(--green);
+}
+.text-button {
+  padding: 5px 0;
+  font-size: 11px;
+}
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border: 0;
+  background: transparent;
+  color: #69786d;
+  font-size: 20px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.icon-button svg {
+  width: 19px;
+  height: 19px;
+}
+.icon-button:hover {
+  background: #f2f5f1;
+}
+input:not([type="checkbox"]),
+textarea,
+select {
+  border-color: #e2e7e1;
+  background: #fff;
+  border-radius: 5px;
+  font-size: 13px;
+  padding: 10px 11px;
+  min-width: 0;
+}
+textarea {
+  min-height: 90px;
+}
+label {
+  font-size: 12px;
+}
+.panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 20px 0;
+  margin: 16px 0;
+}
+.panel + .panel {
+  border-top: 1px solid var(--line);
+}
+.badge,
+.badge.orange,
+.badge.dark {
+  background: transparent;
+  color: #83917e;
+  font-size: 10px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  font-weight: 400;
+}
+.actions {
+  gap: 8px;
+  margin-top: 14px;
+}
+.notice,
+.preview-note {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  font-size: 10px;
+  color: #99a193;
+  margin: 0 0 22px;
+  line-height: 1.7;
+}
+.empty {
+  border: 0;
+  border-radius: 0;
+  padding: 42px 0;
+  background: transparent;
+  font-size: 12px;
+  color: #95a08f;
+}
+.list-item {
+  padding: 24px 0;
+  border-color: var(--line);
+}
+.list-item h3 {
+  margin: 8px 0;
+}
+.list-item .detail-summary {
+  font-size: 13px;
+  line-height: 1.9;
+  color: #68786b;
+}
+.sub {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #83917e;
+}
+.muted {
+  font-size: 10px;
+  color: #91a08d;
+}
+.bottom-nav {
+  bottom: 0;
+  left: 0;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 7px 16px calc(7px + env(safe-area-inset-bottom));
+  box-shadow: none;
+  background: #fffefcfa;
+  gap: 14px;
+  backdrop-filter: blur(10px);
+}
+.bottom-nav button {
+  width: 76px;
+  border-radius: 0;
+  padding: 5px 4px;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  color: #9ba596;
+  gap: 4px;
+}
+.bottom-nav button.active {
+  color: #315e46;
+  background: transparent;
+  border-bottom-color: #66816b;
+}
+.bottom-nav button:hover {
+  background: transparent;
+  color: #315e46;
+}
+.bottom-nav svg {
+  width: 20px;
+  height: 20px;
+}
+.bottom-nav span {
+  font-size: 9px;
+  font-weight: 450;
+}
+.shell {
+  padding-bottom: 75px;
+}
+.explore-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.explore-toolbar .search {
+  flex: 1;
+  width: auto;
+  max-width: none;
+  background: #f8faf7;
+  border-color: transparent;
+}
+.explore-toolbar select {
+  width: auto;
+  max-width: 130px;
+  font-size: 11px;
+  border: 0;
+  padding: 8px;
+  background: #fff;
+}
+.project-gallery {
+  padding: 3px 1px 12px;
+  gap: 24px;
+  scrollbar-width: thin;
+  scrollbar-color: #e3e9df transparent;
+}
+.project-gallery > .card {
+  flex-basis: calc((100% - 48px) / 3);
+}
+.project-gallery.gallery-grid {
+  gap: 28px 24px;
+}
+.card,
+.project-gallery > .card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.project-open {
+  display: block;
+  text-align: left;
+  background: transparent;
+  width: 100%;
+  border-radius: 0;
+  font-weight: 400;
+  color: inherit;
+  padding: 0;
+}
+.project-cover:hover {
+  filter: none;
+}
+.project-open .cover-image {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+}
+.project-cover img {
+  border-radius: 8px;
+  display: block;
+  aspect-ratio: 800/520;
+  object-fit: cover;
+}
+.cover-caption {
+  background: #ffffffa8;
+  color: #7e8b77;
+  border: 0;
+  border-radius: 3px;
+  bottom: 9px;
+  left: 9px;
+  padding: 3px 5px;
+  font-size: 8px;
+}
+.project-open .card-body {
+  padding: 12px 0 0;
+}
+.project-open .card-body h3 {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0 0 6px;
+  font-weight: 550;
+  color: #334c3c;
+}
+.project-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #97a08f;
+}
+.project-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 22px 0 12px;
+}
+.project-heading > img {
+  width: 54px;
+  height: 54px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  object-fit: cover;
+}
+.project-heading h1 {
+  font-size: 20px;
+  margin: 0;
+  line-height: 1.5;
+  flex: 1;
+}
+.project-folds {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 20px;
+  margin: 0 0 20px;
+  position: relative;
+}
+.project-folds > details {
+  font-size: 11px;
+  min-width: 0;
+}
+.project-folds > details > summary {
+  font-size: 11px;
+  color: #85917d;
+  cursor: pointer;
+  padding: 5px 0;
+}
+.project-folds > details[open] {
+  flex: 1;
+}
+.project-folds .thread-body {
+  font-size: 13px;
+  color: #6c7e6d;
+}
+.project-folds label {
+  margin: 10px 0;
+}
+.vibe-options {
+  font-size: 11px;
+  margin-top: 14px;
+}
+.project-folds #questions .list-item {
+  padding: 14px 0;
+}
+.action-menu {
+  position: relative;
+  flex-shrink: 0;
+  font-size: 12px;
+}
+.action-menu > summary {
+  list-style: none;
+  color: #71816e;
+  cursor: pointer;
+  padding: 7px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 20px;
+}
+.action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.action-menu > summary:hover {
+  background: #f4f7f1;
+}
+.action-menu > summary[aria-label="專案選項"],
+.action-menu > summary[aria-label="對話選項"] {
+  font-size: 23px;
+  letter-spacing: 1px;
+}
+.menu-items {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 40;
+  width: 200px;
+  padding: 7px;
+  background: #fff;
+  border: 1px solid #e2e7de;
+  border-radius: 6px;
+  box-shadow: 0 5px 15px #233c2a07;
+  max-height: 65vh;
+  overflow: auto;
+}
+.menu-items > button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: #556b56;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 400;
+}
+.menu-items > button:hover {
+  background: #f5f8f2;
+}
+.menu-items label {
+  margin: 6px 8px 12px;
+}
+.menu-items select {
+  width: 100%;
+  margin-top: 5px;
+}
+.menu-items .actions {
+  margin: 0;
+}
+.forum-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  flex-wrap: nowrap;
+}
+.forum-toolbar #topic-search {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+.forum-toolbar #topic-search input {
+  width: 100%;
+  background: #f8faf7;
+  border-color: transparent;
+  font-size: 12px;
+}
+.forum-toolbar .filter-menu {
+  margin-left: auto;
+}
+.forum-toolbar > button {
+  white-space: nowrap;
+}
+.topic-list {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+.topic-row {
+  padding: 19px 0;
+  border-color: var(--line);
+  background: transparent;
+  gap: 13px;
+}
+.topic-row:hover {
+  background: #fbfcfa;
+}
+.topic-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #f1f5ee;
+  font-size: 10px;
+  color: #889a80;
+}
+.topic-main {
+  gap: 6px;
+}
+.topic-main strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: #3f5943;
+}
+.topic-count {
+  font-size: 13px;
+  font-weight: 450;
+  color: #9aa590;
+}
+.topic-count small {
+  font-size: 8px;
+  margin-top: 3px;
+}
+.forum-pagination {
+  padding-top: 14px;
+}
+.thread-opening {
+  padding: 24px 0 20px;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  position: relative;
+}
+.thread-opening h2 {
+  font-size: 18px;
+  font-weight: 550;
+  margin: 12px 0;
+}
+.thread-opening > .thread-body {
+  font-size: 14px;
+  margin-top: 22px;
+}
+.thread-menu {
+  position: absolute;
+  right: 0;
+  top: 16px;
+}
+.thread-body {
+  line-height: 1.9;
+  font-size: 13px;
+}
+.reply {
+  padding: 20px 0;
+  border-color: var(--line);
+  grid-template-columns: 28px 1fr;
+  gap: 13px;
+}
+.reply-composer {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  margin-top: 24px;
+}
+.compose-topic {
+  padding: 20px 0;
+}
+.workspace-section {
+  border-top: 1px solid var(--line);
+  padding: 19px 0;
+  margin: 0;
+}
+.workspace-section > summary {
+  font-size: 13px;
+  color: #667b61;
+  cursor: pointer;
+}
+.workspace-section form {
+  max-width: 520px;
+  margin: 20px 0;
+}
+.workspace-section .row {
+  margin-top: 15px;
+}
+.workspace-section > p {
+  max-width: 620px;
+}
+.workspace-section details {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.message-page-heading .actions {
+  margin: 0;
+  gap: 2px;
+}
+.contact-settings .menu-items {
+  width: 310px;
+  text-align: left;
+}
+.contact-settings .menu-items .check {
+  align-items: flex-start;
+}
+.contact-settings .menu-items .sub,
+.contact-settings .menu-items .muted {
+  margin: 10px;
+}
+.contact-settings .list-item {
+  padding: 12px 8px;
+}
+.contact-settings .list-item > span {
+  font-size: 11px;
+}
+.inbox-layout {
+  grid-template-columns: 225px 1fr;
+  gap: 30px;
+}
+.inbox-list,
+.message-panel {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.inbox-list {
+  border-right: 1px solid var(--line);
+  padding-right: 20px;
+  min-height: 360px;
+}
+.inbox-person {
+  border-radius: 4px;
+  padding: 14px 7px;
+  gap: 10px;
+}
+.inbox-person.active {
+  background: #f5f8f2;
+}
+.inbox-person strong {
+  font-weight: 500;
+}
+.message-panel header {
+  padding: 5px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.message-panel header h2 {
+  font-size: 14px;
+  font-weight: 550;
+}
+.message-panel header .sub {
+  margin: 4px 0 0;
+}
+.message-history {
+  padding: 20px 0;
+  min-height: 200px;
+}
+.message-bubble {
+  background: #f6f7f3;
+  border-radius: 9px 9px 9px 2px;
+  padding: 11px 14px;
+}
+.message-bubble.outgoing {
+  background: #edf3e9;
+  border-radius: 9px 9px 2px 9px;
+}
+.message-bubble p {
+  font-size: 13px;
+}
+#send-message {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+#send-message label {
+  margin: 0 0 10px;
+}
+#send-message button {
+  float: right;
+}
+#send-message:after {
+  content: "";
+  display: block;
+  clear: both;
+}
+.login-page {
+  background: #fff;
+  grid-template-columns: 1fr 1fr;
+}
+.login-card {
+  padding: 50px clamp(30px, 5vw, 75px);
+}
+.login-brand {
+  margin-bottom: 38px;
+  font-size: 18px;
+}
+.login-card h1 {
+  font-size: 30px;
+  font-weight: 550;
+  color: #4b443b;
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+}
+.login-description {
+  font-size: 12px;
+  color: #9a9388;
+  margin-bottom: 30px;
+}
+.login-google {
+  border-radius: 5px;
+  font-size: 13px;
+  padding: 15px;
+}
+.login-note {
+  font-size: 10px;
+  color: #b0a89c;
+  margin: 15px 0;
+}
+.login-demo {
+  font-size: 11px;
+}
+dialog {
+  border-radius: 8px;
+  padding: 26px;
+  box-shadow: 0 20px 60px #233c2a18;
+}
+dialog h2 {
+  font-size: 18px;
+}
+#player {
+  border-radius: 0;
+}
+@media (max-width: 1100px) {
+  .project-gallery > .card {
+    flex-basis: calc((100% - 24px) / 2);
+  }
+}
+@media (max-width: 760px) {
+  .content {
+    padding: 25px 20px 90px;
+  }
+  .topbar {
+    padding: 0 20px;
+    height: 60px;
+  }
+  .top-actions .muted {
+    display: none;
+  }
+  .page-heading {
+    margin-bottom: 22px;
+  }
+  .page-heading h1 {
+    font-size: 22px;
+  }
+  .bottom-nav {
+    gap: 0;
+    padding: 7px 9px calc(7px + env(safe-area-inset-bottom));
+  }
+  .bottom-nav button {
+    width: auto;
+    flex: 1;
+    padding: 5px 1px;
+  }
+  .bottom-nav span {
+    font-size: 8px;
+  }
+  .explore-toolbar {
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .explore-toolbar .search {
+    min-width: 120px;
+  }
+  .explore-toolbar select {
+    max-width: 104px;
+    padding: 8px 3px;
+    font-size: 10px;
+  }
+  .explore-toolbar > button:last-child {
+    padding: 9px 10px;
+  }
+  .project-gallery > .card {
+    flex-basis: 86%;
+  }
+  .project-gallery {
+    gap: 18px;
+  }
+  .project-gallery.gallery-grid {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .project-heading {
+    gap: 11px;
+    margin-top: 19px;
+  }
+  .project-heading > img {
+    width: 43px;
+    height: 43px;
+  }
+  .project-heading h1 {
+    font-size: 17px;
+  }
+  .project-folds {
+    gap: 22px;
+    flex-wrap: wrap;
+  }
+  .project-folds > details[open] {
+    flex-basis: 100%;
+    order: 2;
+  }
+  .forum-toolbar #topic-search input {
+    font-size: 12px;
+  }
+  .forum-toolbar > button {
+    padding: 9px 10px;
+  }
+  .forum-toolbar .action-menu > summary {
+    padding: 6px;
+  }
+  .topic-row {
+    padding: 17px 0;
+  }
+  .topic-main strong {
+    font-size: 13px;
+  }
+  .topic-avatar {
+    width: 26px;
+    height: 26px;
+  }
+  .inbox-layout {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .inbox-list {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 0 0 15px;
+    display: flex;
+    overflow: auto;
+    gap: 8px;
+  }
+  .inbox-person {
+    width: auto;
+    min-width: 150px;
+    flex-shrink: 0;
+    padding: 10px;
+  }
+  .inbox-person > .muted {
+    display: none;
+  }
+  .inbox-list > .actions {
+    margin: 0;
+    flex-shrink: 0;
+  }
+  .message-history {
+    min-height: 140px;
+    max-height: 450px;
+  }
+  .contact-settings .menu-items {
+    width: min(310px, calc(100vw - 40px));
+    right: 0;
+  }
+  .login-card {
+    padding: 32px 28px;
+  }
+  .login-brand {
+    margin-bottom: 28px;
+  }
+  .login-card h1 {
+    font-size: 27px;
+  }
+  .login-art {
+    height: 30svh;
+  }
+  .two {
+    gap: 4px;
+  }
+  .panel {
+    padding: 17px 0;
+    margin: 8px 0;
+  }
+}
+
+.project-open .card-body h3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 44px;
+}
+#add-pain {
+  white-space: nowrap;
+}
+.muted,
+.project-meta {
+  color: #7a8672;
+}
+.bottom-nav span {
+  font-size: 9px;
+}
+
+.announcement-list .list-item {
+  padding: 20px 0;
+}
+.announcement-list summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: #42563f;
+}
+.announcement-list summary:after {
+  content: "＋";
+  margin-left: auto;
+  color: #a0aa97;
+  font-size: 13px;
+}
+.announcement-list details[open] > summary:after {
+  content: "−";
+}
+.announcement-list summary small {
+  font-size: 9px;
+  font-weight: 400;
+  color: #89977c;
+}
+.announcement-list .detail-summary {
+  font-size: 13px;
+  line-height: 1.9;
+  max-width: 800px;
+  margin: 15px 0 0;
+}
+.pain-item {
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pain-item h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.pain-item > details {
+  margin-top: 10px;
+  font-size: 12px;
+}
+.pain-item > details > summary {
+  font-size: 11px;
+  color: #829278;
+  cursor: pointer;
+}
+.pain-item .detail-summary {
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #687a60;
+}
