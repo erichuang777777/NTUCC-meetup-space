@@ -5,6 +5,11 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await expect(
+    page.getByRole("heading", { name: "重要的事，在這裡知道。" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "展示舞台", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "把日常的小突破，變成大家的靈感。" }),
   ).toBeVisible();
@@ -17,7 +22,7 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
   await page.getByRole("button", { name: "▶ 全螢幕投影" }).click();
   await expect(page.locator("#toast")).toContainText("登入");
   await page.getByRole("button", { name: "關閉 ×", exact: true }).click();
-  await page.getByRole("button", { name: "◇痛點許願池" }).click();
+  await page.getByRole("button", { name: "痛點許願池", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "這個困擾，你也有嗎？" }),
   ).toBeVisible();
@@ -27,6 +32,16 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
 test("mobile layout fits viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
+  await expect(
+    page.getByRole("button", { name: "使用 Google 帳號登入" }),
+  ).toBeVisible();
+  await page.screenshot({ path: "artifacts/login-mobile.png", fullPage: true });
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await expect(
+    page.getByRole("heading", { name: "重要的事，在這裡知道。" }),
+  ).toBeVisible();
+  await expect(page.locator(".bottom-nav button svg")).toHaveCount(5);
+  await page.getByRole("button", { name: "展示舞台", exact: true }).click();
   await expect(page.locator("article.card")).toHaveCount(3);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -79,4 +94,34 @@ test("sandbox strips presenter scripts, enforces CSP and supports isolated navig
     "sandbox",
     "allow-scripts",
   );
+});
+
+test("login is the entry point even for deep links; returning to login hides navigation", async ({
+  page,
+}) => {
+  const requests: string[] = [];
+  page.on("request", (req) => {
+    if (req.url().includes("/rest/v1/")) requests.push(req.url());
+  });
+  await page.goto("/#workspace");
+  await expect(
+    page.getByRole("button", { name: "使用 Google 帳號登入" }),
+  ).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "主要功能" })).toHaveCount(
+    0,
+  );
+  expect(requests).toEqual([]);
+  await page.screenshot({
+    path: "artifacts/login-desktop.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await expect(
+    page.getByRole("button", { name: "公布欄", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await page.getByRole("button", { name: "回登入頁" }).click();
+  await expect(
+    page.getByRole("button", { name: "使用 Google 帳號登入" }),
+  ).toBeVisible();
+  await expect(page.locator(".bottom-nav")).toHaveCount(0);
 });

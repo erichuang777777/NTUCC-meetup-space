@@ -78,7 +78,7 @@ test("write endpoints fail closed without auth", async () => {
     assert.equal(response.status, 401);
   }
 });
-test("MCP rejects GET, foreign origins, and stays stateless across initialize calls", async () => {
+test("MCP rejects GET, foreign origins, and unauthenticated data requests", async () => {
   assert.equal(
     (await mcp(new Request("http://localhost/api/mcp"))).status,
     405,
@@ -114,12 +114,7 @@ test("MCP rejects GET, foreign origins, and stays stateless across initialize ca
         }),
       }),
     );
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("mcp-session-id"), null);
-    assert.equal(
-      (await response.json()).result.serverInfo.name,
-      "ntucc-meetup-spaces",
-    );
+    assert.equal(response.status, 401);
   }
 });
 
@@ -175,6 +170,48 @@ test("REST guard blocks PII before writes and audits overrides without storing r
       }),
     );
   try {
+    for (const path of [
+      "/api/v1/spaces",
+      "/api/v1/spaces/10000000-0000-4000-8000-000000000001/slides",
+    ]) {
+      assert.equal(
+        (await api(new Request("http://localhost" + path))).status,
+        401,
+      );
+    }
+    assert.equal(
+      calls.length,
+      0,
+      "anonymous reads must fail before contacting the database",
+    );
+    for (let i = 0; i < 2; i++) {
+      const response = await mcp(
+        new Request("http://localhost/api/mcp", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer test-jwt",
+            "content-type": "application/json",
+            accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "initialize",
+            params: {
+              protocolVersion: "2025-11-25",
+              capabilities: {},
+              clientInfo: { name: "test", version: "1" },
+            },
+          }),
+        }),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("mcp-session-id"), null);
+      assert.equal(
+        (await response.json()).result.serverInfo.name,
+        "ntucc-meetup-spaces",
+      );
+    }
     const payload = { title: "MRN: 12345678", summary: "Test summary" };
     const blocked = await request(payload);
     assert.equal(blocked.status, 422);

@@ -22,7 +22,7 @@ const read = async (q: any) => {
 };
 let user: any = null,
   profile: any = null,
-  page = "stage",
+  page = "announcements",
   filter = "全部",
   search = "",
   activeSession: any = null,
@@ -33,13 +33,57 @@ let user: any = null,
   mySpaces: any[] = [],
   currentSpace: any = null;
 let demo = !client;
+const allowDemo = demo && import.meta.env.DEV;
+let demoEntered = false;
 const navs = [
-  ["stage", "◈", "展示舞台"],
-  ["announcements", "▤", "公布欄"],
-  ["registration", "▦", "活動報名"],
-  ["pain", "◇", "痛點許願池"],
-  ["workspace", "▧", "我的工作空間"],
+  ["announcements", "公布欄"],
+  ["stage", "展示舞台"],
+  ["registration", "活動報名"],
+  ["pain", "痛點許願池"],
+  ["workspace", "我的工作空間"],
 ];
+const iconPaths: Record<string, string> = {
+  announcements:
+    '<path d="M4 10v4h4l9 4V6l-9 4H4Z"/><path d="m8 14 1 6h3l-2-5M20 9v6"/>',
+  stage:
+    '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="m10 8 5 3-5 3V8ZM8 21l4-4 4 4"/>',
+  registration:
+    '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18m-13 5 3 3 5-5"/>',
+  pain: '<path d="M9 18h6m-6 3h6M8 14a6 6 0 1 1 8 0c-1 1-1 2-1 2H9s0-1-1-2Z"/>',
+  workspace:
+    '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
+  admin:
+    '<path d="M12 3 4 7v6c0 4 8 8 8 8s8-4 8-8V7l-8-4Z"/><path d="m8 12 3 3 5-5"/>',
+};
+function icon(id: string) {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[id] ?? iconPaths.announcements}</svg>`;
+}
+async function signIn() {
+  if (!client) throw Error("尚未連接登入服務，可先使用下方的介面預覽。");
+  const { error } = await client.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: location.origin },
+  });
+  if (error) throw error;
+}
+function loginView() {
+  $("#app").innerHTML =
+    `<main class="login-page"><div class="login-art" role="img" aria-label="臺大癌醫同仁共同交流 AI 與工作經驗的插畫"></div><section class="login-card"><a class="login-brand" href="/">${icon("stage")} NTUCC <span>MEETUP SPACES</span></a><p class="eyebrow">CONNECT · SHARE · INSPIRE</p><h1>讓每個小實驗，<br>成為相遇的起點。</h1><p class="login-description">臺大癌醫內部交流與 AI 展示空間<br>分享實戰、聊聊踩坑，一起讓好想法發生。</p><button id="login-google" class="login-google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 12.2c0-.7-.1-1.4-.2-2.2H12v4h5a4.5 4.5 0 0 1-5 3.8 5.8 5.8 0 1 1 0-11.6c1.5 0 2.7.5 3.7 1.4l2.9-2.8A10 10 0 1 0 12 22c5.8 0 9-4 9-9.8Z"/></svg>使用 Google 帳號登入<span>↗</span></button><p class="login-note">首次登入後，請輸入院內通關密語。<br>登入後將進入公布欄，查看最新活動與提醒。</p>${allowDemo ? '<button id="demo-enter" class="login-demo">預覽介面（示例資料） →</button>' : ""}<div class="login-footer">NTUCC · 臺大癌醫<br>帶上你的想法，和同仁一起交流。</div></section></main>`;
+  $("#login-google").onclick = () => void run(signIn);
+  if (allowDemo)
+    $("#demo-enter").onclick = () =>
+      void run(async () => {
+        demoEntered = true;
+        page = "announcements";
+        history.replaceState(
+          null,
+          "",
+          location.pathname + location.search + "#announcements",
+        );
+        await load();
+        render();
+      });
+}
 const LIST =
   "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,votes,vibe_counts,slot_order,session_id,visibility,created_at";
 const demoSpaces = [
@@ -157,6 +201,7 @@ async function send(action: string, payload: any = {}, reviewContent = true) {
   return data;
 }
 async function load() {
+  if (!demo && !profile?.passcode_verified) return;
   if (demo) {
     spaces = demoSpaces;
     announcements = [
@@ -196,7 +241,7 @@ async function load() {
     read(
       client!
         .from("meetup_sessions")
-        .select("id,title,session_date,start_time,location,credits")
+        .select("id,title,session_date,start_time,location")
         .eq("is_active", true),
     ),
   ]);
@@ -204,9 +249,41 @@ async function load() {
   activeSession = results[3][0] ?? null;
 }
 function render() {
-  const title = navs.find((n) => n[0] === page)?.[2] ?? "管理後台";
+  if (!user && !demoEntered) {
+    loginView();
+    return;
+  }
+  if (user && !profile?.passcode_verified) {
+    $("#app").innerHTML =
+      `<main class="access-gate"><a class="login-brand" href="/">NTUCC Meetup Spaces</a>${gate()}<button id="gate-signout" class="ghost">登出</button></main>`;
+    $("#gate-signout").onclick = () =>
+      void run(async () => {
+        const { error } = await client!.auth.signOut();
+        if (error) throw error;
+        user = null;
+        profile = null;
+        render();
+      });
+    $("#passcode-form").onsubmit = (e) => {
+      e.preventDefault();
+      void run(async () => {
+        const input = $<HTMLInputElement>("#passcode");
+        const { data, error } = await client!.rpc("verify_ntucc_passcode", {
+          input_code: input.value,
+        });
+        input.value = "";
+        if (error || !data) throw Error("密語不正確或嘗試過多，請稍後再試");
+        await refreshProfile();
+        await load();
+        page = "announcements";
+        render();
+      });
+    };
+    return;
+  }
+  const title = navs.find((n) => n[0] === page)?.[1] ?? "管理後台";
   $("#app").innerHTML =
-    `<div class="shell"><aside class="sidebar"><a href="#stage" class="brand"><span class="brand-icon">✳</span><br>NTUCC<br>Meetup Spaces<small>CONNECT · SHARE · INSPIRE</small></a><nav class="nav">${navs.map(([id, icon, label]) => `<button data-nav="${id}" class="${page === id ? "active" : ""}"><span>${icon}</span>${label}</button>`).join("")}${profile?.role === "admin" ? `<button data-nav="admin" class="${page === "admin" ? "active" : ""}"><span>⚙</span>管理後台</button>` : ""}</nav><div class="sidebar-foot">一個小實驗，一次新連結。<br>臺大癌醫內部交流與 AI 展示空間<br><span>NTUCC · INTERNAL COMMUNITY</span></div></aside><main class="main"><header class="topbar"><div class="breadcrumb">Meetup Spaces　/　<b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "訪客瀏覽"}</span><button id="auth" class="${user ? "secondary" : ""}">${user ? "登出" : "Google 登入　↗"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main></div>`;
+    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="breadcrumb"><b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id ? 'aria-current="page"' : ""} class="${page === id ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -217,34 +294,25 @@ function render() {
         render();
       }),
   );
+  $(".app-brand").onclick = (e) => {
+    e.preventDefault();
+    page = "announcements";
+    location.hash = page;
+    render();
+  };
   $("#auth").onclick = () =>
-    run(async () => {
-      if (!client) throw Error("請先設定 Supabase 環境變數");
+    void run(async () => {
       if (user) {
-        await client.auth.signOut();
-        location.reload();
-      } else {
-        const { error } = await client.auth.signInWithOAuth({
-          provider: "google",
-          options: { redirectTo: location.origin },
-        });
+        const { error } = await client!.auth.signOut();
         if (error) throw error;
       }
+      user = null;
+      profile = null;
+      demoEntered = false;
+      page = "announcements";
+      history.replaceState(null, "", location.pathname + location.search);
+      render();
     });
-  if (user && !profile?.passcode_verified)
-    $("#passcode-form").onsubmit = (e) => {
-      e.preventDefault();
-      run(async () => {
-        const input = $<HTMLInputElement>("#passcode");
-        const { data, error } = await client!.rpc("verify_ntucc_passcode", {
-          input_code: input.value,
-        });
-        input.value = "";
-        if (error || !data) throw Error("密語不正確或嘗試過多，請稍後再試");
-        await refreshProfile();
-        render();
-      });
-    };
   switch (page) {
     case "stage":
       stage();
@@ -269,7 +337,7 @@ function render() {
   }
 }
 function gate() {
-  return `<div class="panel"><h2>歡迎加入院內交流</h2><p class="sub">首次登入請輸入院內通關密語，開啟報名、分享與互動功能。</p><form id="passcode-form"><label>院內通關密語<input id="passcode" type="password" required autocomplete="off" maxlength="100"></label><button>驗證並加入</button></form></div>`;
+  return `<div class="panel"><h2>歡迎加入院內交流</h2><p class="sub">請先輸入院內通關密語，完成驗證後即可查看公布欄與同仁分享。</p><form id="passcode-form"><label>院內通關密語<input id="passcode" type="password" required autocomplete="off" maxlength="100"></label><button>驗證並加入</button></form></div>`;
 }
 async function run(fn: () => Promise<any>) {
   try {
@@ -293,7 +361,7 @@ function stage() {
       "把日常的小突破，變成大家的靈感。",
       "不必等到完美才分享。10 分鐘，一起看看 AI 在醫療日常裡的更多可能。",
     ) +
-    `<div class="hero"><div><span class="badge dark">${activeSession ? "NEXT MEETUP" : "A SPACE FOR EVERY SMALL IDEA"}</span><h2>${activeSession ? esc(activeSession.title) : "跨出第一步，就從分享開始。"}</h2><p class="sub">${activeSession ? `${esc(activeSession.session_date)} · ${esc(activeSession.start_time.slice(0, 5))} · ${esc(activeSession.location)}<br>${esc(activeSession.credits)}` : "7 分鐘實戰演示，3 分鐘交流問答。<br>成功的嘗試、踩過的坑，都能成為別人的起點。"}</p><div class="actions"><button id="create-space">分享我的小實驗　＋</button><button id="go-register" class="ghost">${activeSession ? "報名本次交流" : "查看活動資訊"}　↗</button></div></div><div class="hero-art">✳<small>SMALL IDEAS. REAL IMPACT.</small></div></div><div class="row section-head"><h2>探索同仁的實驗室 <span class="muted">${spaces.length} 個分享</span></h2><span class="muted">每個經驗，都有值得帶走的地方。</span></div><div class="row" style="margin-top:22px"><div class="tabs">${["全部", "實戰展示", "踩坑避雷"].map((t) => `<button data-filter="${t}" class="${filter === t ? "active" : ""}">${t === "實戰展示" ? "✨ " : t === "踩坑避雷" ? "💣 " : ""}${t}</button>`).join("")}</div><input id="space-search" class="search" placeholder="⌕　搜尋主題、關鍵字…" aria-label="搜尋展示" value="${esc(search)}"></div><div class="grid">${list.map(card).join("")}</div>${!list.length ? '<div class="empty">目前還沒有符合的展示。成為第一位分享者吧。</div>' : ""}<div class="notice">🔒 分享前，先照顧好個資。請使用合成或完整去識別化資料，避免病歷、姓名、床號與任何可辨識病患的資訊。</div>`;
+    `<div class="hero"><div><span class="badge dark">${activeSession ? "NEXT MEETUP" : "A SPACE FOR EVERY SMALL IDEA"}</span><h2>${activeSession ? esc(activeSession.title) : "跨出第一步，就從分享開始。"}</h2><p class="sub">${activeSession ? `${esc(activeSession.session_date)} · ${esc(activeSession.start_time.slice(0, 5))} · ${esc(activeSession.location)}` : "7 分鐘實戰演示，3 分鐘交流問答。<br>成功的嘗試、踩過的坑，都能成為別人的起點。"}</p><div class="actions"><button id="create-space">分享我的小實驗　＋</button><button id="go-register" class="ghost">${activeSession ? "報名本次交流" : "查看活動資訊"}　↗</button></div></div><div class="hero-art">✳<small>SMALL IDEAS. REAL IMPACT.</small></div></div><div class="row section-head"><h2>探索同仁的實驗室 <span class="muted">${spaces.length} 個分享</span></h2><span class="muted">每個經驗，都有值得帶走的地方。</span></div><div class="row" style="margin-top:22px"><div class="tabs">${["全部", "實戰展示", "踩坑避雷"].map((t) => `<button data-filter="${t}" class="${filter === t ? "active" : ""}">${t === "實戰展示" ? "✨ " : t === "踩坑避雷" ? "💣 " : ""}${t}</button>`).join("")}</div><input id="space-search" class="search" placeholder="⌕　搜尋主題、關鍵字…" aria-label="搜尋展示" value="${esc(search)}"></div><div class="grid">${list.map(card).join("")}</div>${!list.length ? '<div class="empty">目前還沒有符合的展示。成為第一位分享者吧。</div>' : ""}<div class="notice">🔒 分享前，先照顧好個資。請使用合成或完整去識別化資料，避免病歷、姓名、床號與任何可辨識病患的資訊。</div>`;
   $("#create-space").onclick = () => {
     if (requireMember()) editSpace();
   };
@@ -605,12 +673,12 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") navigate(-1);
 });
 function announcementView() {
-  const cats = ["全部", "場地異動", "資安紅線", "教育學分", "活動公告"];
+  const cats = ["全部", "場地異動", "資安紅線", "活動公告"];
   $("#view").innerHTML =
     heading(
       "COMMUNITY NOTICEBOARD",
       "重要的事，在這裡知道。",
-      "活動資訊、教育學分與資安提醒，一起掌握交流日常。",
+      "活動資訊、交流安排與資安提醒，一起掌握交流日常。",
     ) +
     `<div class="tabs">${cats.map((t) => `<button data-cat="${t}" class="${filter === t ? "active" : ""}">${t}</button>`).join("")}</div><div class="panel">${
       announcements
@@ -646,12 +714,12 @@ async function registration() {
   $("#view").innerHTML =
     heading(
       "COME MEET YOUR COLLEAGUES",
-      "留一個午休，給新的可能。",
-      "一起吃飯、聊聊實驗，也把彼此的經驗帶回工作現場。",
+      "留一段時間，給新的可能。",
+      "一起交流、聊聊實驗，也把彼此的經驗帶回工作現場。",
     ) +
     (!s
       ? '<div class="empty">新的 Meetup 正在準備中，請留意公布欄。</div>'
-      : `<div class="two"><section class="panel"><span class="badge">本期 Meetup</span><h2>${esc(s.title)}</h2><p>▦ ${esc(s.session_date)}　${esc(s.start_time.slice(0, 5))}<br>⌖ ${esc(s.location)}</p><p class="sub">${esc(s.credits)}</p><p class="sub">餐盒將依報名需求準備，請於活動現場完成報到後領取。</p></section><section class="panel"><h2>報名與報到</h2><div id="registration-state"></div></section></div><div id="speaker-checkin"></div>`);
+      : `<div class="two"><section class="panel"><span class="badge">本期 Meetup</span><h2>${esc(s.title)}</h2><p>▦ ${esc(s.session_date)}　${esc(s.start_time.slice(0, 5))}<br>⌖ ${esc(s.location)}</p><p class="sub">是否供餐與領取方式，請以各場活動公告為準。</p></section><section class="panel"><h2>報名與報到</h2><div id="registration-state"></div></section></div><div id="speaker-checkin"></div>`);
   if (!s) return;
   if (!profile?.passcode_verified) {
     $("#registration-state").innerHTML =
@@ -979,9 +1047,9 @@ async function adminView() {
       "建立新場次",
       field("活動名稱", "title") +
         field("日期", "session_date", "", "date") +
-        field("開始時間", "start_time", "12:30", "time") +
-        field("地點", "location") +
-        field("教育學分資訊", "credits", "", "text", false),
+        field("開始時間", "start_time", "", "time") +
+        field("地點", "location"),
+
       async (f) => {
         await send("session", Object.fromEntries(f));
         await load();
@@ -992,7 +1060,7 @@ async function adminView() {
     formDialog(
       "發布公告",
       field("標題", "title") +
-        `<label>分類<select name="category"><option>活動公告</option><option>場地異動</option><option>資安紅線</option><option>教育學分</option></select></label>` +
+        `<label>分類<select name="category"><option>活動公告</option><option>場地異動</option><option>資安紅線</option></select></label>` +
         area("公告內容", "content") +
         '<label class="check"><input name="is_pinned" type="checkbox">置頂</label>',
       async (f) => {
@@ -1098,12 +1166,12 @@ async function refreshProfile() {
 }
 async function init() {
   try {
-    page = location.hash.slice(1) || "stage";
+    page = "announcements";
     if (client) {
       user = (await client.auth.getSession()).data.session?.user ?? null;
       if (user) await refreshProfile();
     }
-    await load();
+    if (profile?.passcode_verified) await load();
     render();
     if (client && profile?.passcode_verified) {
       client
@@ -1125,6 +1193,22 @@ async function init() {
     console.error(e);
   }
 }
+client?.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_OUT") {
+    user = null;
+    profile = null;
+    spaces = [];
+    announcements = [];
+    pains = [];
+    mySpaces = [];
+    tokens = [];
+    currentSpace = null;
+    document
+      .querySelectorAll<HTMLDialogElement>("dialog[open]")
+      .forEach((d) => d.close());
+    render();
+  }
+});
 void init();
 
 async function speakerCheckin(s: any) {

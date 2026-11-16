@@ -44,7 +44,7 @@ export default async (req: Request) => {
       headers: req.headers,
       body: raw,
     });
-    const actor = await authenticate(req, false);
+    const actor = await authenticate(req);
     const server = new McpServer({
       name: "ntucc-meetup-spaces",
       version: "1.0.0",

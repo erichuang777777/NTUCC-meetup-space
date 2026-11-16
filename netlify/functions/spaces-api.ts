@@ -25,6 +25,7 @@ export default async (req: Request) => {
     const path = new URL(req.url).pathname;
     const tail = path.replace(/^.*\/(?:spaces-api|spaces)\/?/, "");
     if (req.method === "GET") {
+      await authenticate(req);
       if (!tail)
         return json(
           checked(
@@ -240,7 +241,7 @@ export default async (req: Request) => {
         const p = z
           .object({
             title: z.string().min(1).max(160),
-            category: z.enum(["場地異動", "資安紅線", "教育學分", "活動公告"]),
+            category: z.enum(["場地異動", "資安紅線", "活動公告"]),
             content: z.string().min(1).max(5000),
             is_pinned: z.boolean(),
           })
@@ -272,7 +273,7 @@ export default async (req: Request) => {
             session_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
             start_time: z.string().regex(/^\d{2}:\d{2}$/),
             location: z.string().max(300),
-            credits: z.string().max(300),
+            credits: z.string().max(300).default(""),
           })
           .parse(payload);
         await guard(p, force_override, actor, channel);
