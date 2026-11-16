@@ -241,7 +241,7 @@ export default async (req: Request) => {
         const p = z
           .object({
             title: z.string().min(1).max(160),
-            category: z.enum(["場地異動", "資安紅線", "活動公告"]),
+            category: z.literal("活動公告").default("活動公告"),
             content: z.string().min(1).max(5000),
             is_pinned: z.boolean(),
           })

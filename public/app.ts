@@ -673,29 +673,20 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "ArrowLeft") navigate(-1);
 });
 function announcementView() {
-  const cats = ["全部", "場地異動", "資安紅線", "活動公告"];
   $("#view").innerHTML =
     heading(
       "COMMUNITY NOTICEBOARD",
       "重要的事，在這裡知道。",
-      "活動資訊、交流安排與資安提醒，一起掌握交流日常。",
+      "最新活動、分享消息與交流安排，都在這裡。",
     ) +
-    `<div class="tabs">${cats.map((t) => `<button data-cat="${t}" class="${filter === t ? "active" : ""}">${t}</button>`).join("")}</div><div class="panel">${
+    `<div class="panel">${
       announcements
-        .filter((a) => filter === "全部" || a.category === filter)
         .map(
           (a) =>
-            `<article class="list-item"><span class="badge">${esc(a.category)}</span> <span class="muted">${a.is_pinned ? "📌 置頂" : ""}</span><h3>${esc(a.title)}</h3><p class="detail-summary">${esc(a.content)}</p>${profile?.role === "admin" ? `<button class="ghost" data-pin="${a.id}" data-value="${!a.is_pinned}">${a.is_pinned ? "取消置頂" : "置頂"}</button>` : ""}</article>`,
+            `<article class="list-item"><span class="muted">${a.is_pinned ? "📌 置頂" : ""}</span><h3>${esc(a.title)}</h3><p class="detail-summary">${esc(a.content)}</p>${profile?.role === "admin" ? `<button class="ghost" data-pin="${a.id}" data-value="${!a.is_pinned}">${a.is_pinned ? "取消置頂" : "置頂"}</button>` : ""}</article>`,
         )
         .join("") || '<p class="sub">目前沒有公告。</p>'
     }</div>`;
-  document.querySelectorAll<HTMLElement>("[data-cat]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        filter = b.dataset.cat!;
-        announcementView();
-      }),
-  );
   document.querySelectorAll<HTMLElement>("[data-pin]").forEach(
     (b) =>
       (b.onclick = () =>
@@ -1060,13 +1051,12 @@ async function adminView() {
     formDialog(
       "發布公告",
       field("標題", "title") +
-        `<label>分類<select name="category"><option>活動公告</option><option>場地異動</option><option>資安紅線</option></select></label>` +
         area("公告內容", "content") +
         '<label class="check"><input name="is_pinned" type="checkbox">置頂</label>',
       async (f) => {
         await send("announcement", {
           title: f.get("title"),
-          category: f.get("category"),
+          category: "活動公告",
           content: f.get("content"),
           is_pinned: f.get("is_pinned") === "on",
         });
