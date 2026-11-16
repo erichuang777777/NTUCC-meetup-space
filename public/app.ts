@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { mountForum, coverFor } from "./forum";
 import { createClient } from "@supabase/supabase-js";
 import { scanValue, maskValue } from "./pii";
 import { sandboxDocument } from "./player";
@@ -37,7 +38,7 @@ const allowDemo = demo && import.meta.env.DEV;
 let demoEntered = false;
 const navs = [
   ["announcements", "公布欄"],
-  ["stage", "展示舞台"],
+  ["stage", "專案探索"],
   ["registration", "活動報名"],
   ["pain", "痛點許願池"],
   ["workspace", "我的工作空間"],
@@ -85,7 +86,7 @@ function loginView() {
       });
 }
 const LIST =
-  "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,votes,vibe_counts,slot_order,session_id,visibility,created_at";
+  "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,has_cover,votes,vibe_counts,slot_order,session_id,visibility,created_at";
 const demoSpaces = [
   {
     id: "demo1",
@@ -248,7 +249,14 @@ async function load() {
   [spaces, announcements, pains] = results;
   activeSession = results[3][0] ?? null;
 }
+let hubTab = "discussions";
+let galleryMode = "swipe";
+let coverObserver: IntersectionObserver | null = null;
+let selectedThread: string | undefined;
 function render() {
+  coverObserver?.disconnect();
+  if (qaPoll) clearInterval(qaPoll);
+  qaPoll = null;
   if (!user && !demoEntered) {
     loginView();
     return;
@@ -275,15 +283,26 @@ function render() {
         if (error || !data) throw Error("密語不正確或嘗試過多，請稍後再試");
         await refreshProfile();
         await load();
-        page = "announcements";
-        render();
+        const pending = sessionStorage.getItem("ntucc-project-link");
+        sessionStorage.removeItem("ntucc-project-link");
+        const target = pending?.match(
+          /^#project\/([0-9a-f-]{36})(?:\/thread\/([0-9a-f-]{36}))?$/i,
+        );
+        if (target) await openSpace(target[1], target[2]);
+        else {
+          page = "announcements";
+          render();
+        }
       });
     };
     return;
   }
-  const title = navs.find((n) => n[0] === page)?.[1] ?? "管理後台";
+  const title =
+    page === "project"
+      ? "專案討論區"
+      : (navs.find((n) => n[0] === page)?.[1] ?? "管理後台");
   $("#app").innerHTML =
-    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="breadcrumb"><b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id ? 'aria-current="page"' : ""} class="${page === id ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
+    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="breadcrumb"><b>${title}</b></div><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">介面預覽模式 · 以下展示為示例。完成 Supabase 與 Netlify 設定後即可使用真實資料。</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div><footer><span>NTUCC Meetup Spaces · 讓好的想法，在這裡相遇。</span><span>以分享連結彼此 ↗</span></footer></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id || (page === "project" && id === "stage") ? 'aria-current="page"' : ""} class="${page === id || (page === "project" && id === "stage") ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -314,6 +333,10 @@ function render() {
       render();
     });
   switch (page) {
+    case "project":
+      $("#view").innerHTML = '<p class="sub">正在開啟專案…</p>';
+      void run(renderProject);
+      break;
     case "stage":
       stage();
       break;
@@ -350,6 +373,7 @@ function heading(kicker: string, title: string, desc: string) {
   return `<div class="eyebrow">${kicker}</div><h1>${title}</h1><p class="sub">${desc}</p>`;
 }
 function stage() {
+  coverObserver?.disconnect();
   const list = spaces.filter(
     (s) =>
       (filter === "全部" || s.category_tag === filter) &&
@@ -357,11 +381,32 @@ function stage() {
   );
   $("#view").innerHTML =
     heading(
-      "THE 10-MINUTE SHOWCASE",
-      "把日常的小突破，變成大家的靈感。",
-      "不必等到完美才分享。10 分鐘，一起看看 AI 在醫療日常裡的更多可能。",
+      "DISCOVER · DISCUSS · BUILD",
+      "滑一滑，找到想一起聊的專案。",
+      "先從圖片認識同仁的小實驗。點進專案，問題、心得與資源都在同一個討論區。",
     ) +
-    `<div class="hero"><div><span class="badge dark">${activeSession ? "NEXT MEETUP" : "A SPACE FOR EVERY SMALL IDEA"}</span><h2>${activeSession ? esc(activeSession.title) : "跨出第一步，就從分享開始。"}</h2><p class="sub">${activeSession ? `${esc(activeSession.session_date)} · ${esc(activeSession.start_time.slice(0, 5))} · ${esc(activeSession.location)}` : "7 分鐘實戰演示，3 分鐘交流問答。<br>成功的嘗試、踩過的坑，都能成為別人的起點。"}</p><div class="actions"><button id="create-space">分享我的小實驗　＋</button><button id="go-register" class="ghost">${activeSession ? "報名本次交流" : "查看活動資訊"}　↗</button></div></div><div class="hero-art">✳<small>SMALL IDEAS. REAL IMPACT.</small></div></div><div class="row section-head"><h2>探索同仁的實驗室 <span class="muted">${spaces.length} 個分享</span></h2><span class="muted">每個經驗，都有值得帶走的地方。</span></div><div class="row" style="margin-top:22px"><div class="tabs">${["全部", "實戰展示", "踩坑避雷"].map((t) => `<button data-filter="${t}" class="${filter === t ? "active" : ""}">${t === "實戰展示" ? "✨ " : t === "踩坑避雷" ? "💣 " : ""}${t}</button>`).join("")}</div><input id="space-search" class="search" placeholder="⌕　搜尋主題、關鍵字…" aria-label="搜尋展示" value="${esc(search)}"></div><div class="grid">${list.map(card).join("")}</div>${!list.length ? '<div class="empty">目前還沒有符合的展示。成為第一位分享者吧。</div>' : ""}<div class="notice">🔒 分享前，先照顧好個資。請使用合成或完整去識別化資料，避免病歷、姓名、床號與任何可辨識病患的資訊。</div>`;
+    `<div class="discovery-actions row"><span class="sub">每個小實驗，都有值得一起聊的地方。</span><div class="actions"><button id="create-space">＋ 分享我的專案</button><button id="go-register" class="ghost">活動資訊 ↗</button></div></div><div class="row section-head"><h2>探索同仁的實驗室 <span class="muted">${spaces.length} 個分享</span></h2><span class="muted">每個經驗，都有值得帶走的地方。</span></div><div class="row" style="margin-top:22px"><div class="tabs">${["全部", "實戰展示", "踩坑避雷"].map((t) => `<button data-filter="${t}" class="${filter === t ? "active" : ""}">${t === "實戰展示" ? "✨ " : t === "踩坑避雷" ? "💣 " : ""}${t}</button>`).join("")}</div><input id="space-search" class="search" placeholder="⌕　搜尋主題、關鍵字…" aria-label="搜尋展示" value="${esc(search)}"></div><div class="row gallery-controls"><span class="muted">${galleryMode === "swipe" ? "← 左右滑動照片，探索專案 →" : "以圖片總覽所有專案"}</span><div class="actions"><button class="${galleryMode === "swipe" ? "secondary" : "ghost"}" id="gallery-swipe">滑動瀏覽</button><button class="${galleryMode === "grid" ? "secondary" : "ghost"}" id="gallery-grid">圖片總覽</button></div></div><div class="project-gallery ${galleryMode === "grid" ? "gallery-grid" : ""}" aria-label="專案圖片探索">${list.map(card).join("")}</div><div class="row gallery-position"><span id="gallery-index" class="muted">${list.length ? 1 : 0} / ${list.length}</span><div class="actions"><button class="ghost" id="gallery-prev" aria-label="上一個專案">←</button><button class="ghost" id="gallery-next" aria-label="下一個專案">→</button></div></div>${!list.length ? '<div class="empty">目前還沒有符合的展示。成為第一位分享者吧。</div>' : ""}<div class="notice">🔒 分享前，先照顧好個資。請使用合成或完整去識別化資料，避免病歷、姓名、床號與任何可辨識病患的資訊。</div>`;
+  $("#gallery-swipe").onclick = () => {
+    galleryMode = "swipe";
+    stage();
+  };
+  $("#gallery-grid").onclick = () => {
+    galleryMode = "grid";
+    stage();
+  };
+  const gallery = $(".project-gallery");
+  const step = () => {
+    const first = gallery.querySelector<HTMLElement>(".card");
+    return (first?.offsetWidth ?? 300) + 20;
+  };
+  $("#gallery-prev").onclick = () =>
+    gallery.scrollBy({ left: -step(), behavior: "smooth" });
+  $("#gallery-next").onclick = () =>
+    gallery.scrollBy({ left: step(), behavior: "smooth" });
+  gallery.onscroll = () => {
+    $("#gallery-index").textContent =
+      `${Math.min(list.length, Math.round(gallery.scrollLeft / step()) + 1)} / ${list.length}`;
+  };
   $("#create-space").onclick = () => {
     if (requireMember()) editSpace();
   };
@@ -384,6 +429,24 @@ function stage() {
     input.focus();
     input.setSelectionRange(pos, pos);
   };
+  coverObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const img = entry.target as HTMLImageElement;
+        coverObserver?.unobserve(img);
+        const space = list.find((s) => s.id === img.dataset.spaceCover);
+        if (space)
+          void loadSpaceCover(space).then((url) => {
+            if (url && img.isConnected) img.src = url;
+          });
+      }
+    },
+    { rootMargin: "150px" },
+  );
+  document
+    .querySelectorAll<HTMLImageElement>(".project-cover img[data-space-cover]")
+    .forEach((img) => coverObserver!.observe(img));
   document
     .querySelectorAll<HTMLElement>("[data-open]")
     .forEach((b) => (b.onclick = () => run(() => openSpace(b.dataset.open!))));
@@ -403,60 +466,147 @@ function slotLabel(s: any) {
 }
 function card(s: any, i: number) {
   const fail = s.category_tag === "踩坑避雷";
-  return `<article class="card"><div class="preview ${fail ? "warm" : i % 3 === 2 ? "blue" : ""}"><span class="number">EXPERIMENT / ${String(i + 1).padStart(2, "0")}</span>${fail ? "TRIAL & LEARN" : "IDEA → IMPACT"}<small>NTUCC · ${s.slide_count || 0} SLIDES</small></div><div class="card-body"><div class="row"><span class="badge ${fail ? "orange" : ""}">${fail ? "💣" : "✨"} ${esc(s.category_tag)}</span><span class="muted">${slotLabel(s)}</span></div><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><div class="actions">${(
+  return `<article class="card"><button class="project-cover" data-open="${esc(s.id)}" aria-label="查看專案：${esc(s.title)}"><img ${s.has_cover ? `data-space-cover="${esc(s.id)}"` : ""} src="${esc(coverFor(s, i))}" alt="${esc(s.title)}的專案封面" loading="lazy" width="800" height="520"><span class="cover-caption">${s.has_cover || s.cover_image ? "專案封面" : "示意封面"} · 點入專案討論 ↗</span></button><div class="card-body"><div class="row"><span class="badge ${fail ? "orange" : ""}">${fail ? "💣" : "✨"} ${esc(s.category_tag)}</span><span class="muted">${slotLabel(s)}</span></div><h3>${esc(s.title)}</h3><p>${esc(s.summary)}</p><div class="actions">${(
     s.highlights ?? []
   )
     .slice(0, 3)
     .map((t: string) => `<span class="muted"># ${esc(t)}</span>`)
     .join(
       "",
-    )}</div></div><div class="card-footer"><span>♡ ${s.votes} 位同仁感興趣</span><button data-open="${esc(s.id)}" class="secondary">進入空間 ↗</button></div></article>`;
+    )}</div></div><div class="card-footer"><span>♡ ${s.votes} 位同仁感興趣</span><button data-open="${esc(s.id)}" class="secondary">進入討論區 ↗</button></div></article>`;
 }
-async function openSpace(id: string) {
+async function openSpace(id: string, threadId?: string, push = true) {
   currentSpace =
     spaces.find((s) => s.id === id) ?? mySpaces.find((s) => s.id === id);
-  if (!currentSpace) throw Error("找不到展示");
+  if (!currentSpace && !demo) {
+    const result = await client!
+      .from("spaces")
+      .select(LIST)
+      .eq("id", id)
+      .maybeSingle();
+    if (result.error) throw result.error;
+    currentSpace = result.data;
+  }
+  if (!currentSpace) throw Error("此專案不存在或沒有瀏覽權限");
+  selectedThread = threadId;
+  hubTab = "discussions";
+  page = "project";
+  if (push)
+    history.pushState(
+      null,
+      "",
+      `#project/${encodeURIComponent(id)}${threadId ? "/thread/" + encodeURIComponent(threadId) : ""}`,
+    );
+  render();
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+async function loadSpaceCover(space: any): Promise<string | undefined> {
+  if (space.cover_image) return space.cover_image;
+  if (!space.has_cover || !client) return;
+  const { data, error } = await client
+    .from("spaces")
+    .select("cover_image")
+    .eq("id", space.id)
+    .maybeSingle();
+  if (!error && data?.cover_image) {
+    space.cover_image = data.cover_image;
+    return data.cover_image;
+  }
+}
+async function renderProject() {
   const s = currentSpace;
-  const dialog = $<HTMLDialogElement>("#detail");
-  dialog.innerHTML = `<div class="row"><span class="badge">${esc(s.category_tag)}</span><button id="close-detail" class="ghost">關閉 ×</button></div><h2>${esc(s.title)}</h2><p class="detail-summary">${esc(s.summary)}</p><div class="actions"><button id="project">▶ 全螢幕投影</button><button id="space-vote" class="secondary">♡ 我想聽 · ${s.votes}</button>${user?.id === s.owner_id ? '<button id="edit-current" class="ghost">編輯展示</button>' : ""}</div><h3>延伸資源與參考連結</h3>${(s.reference_links ?? []).map((l: any) => safeLink(l)).join("") || '<p class="sub">講者尚未提供延伸資源。</p>'}<div class="actions">${vibeButtons()}</div><h3>Slido 問答牆 <span class="qa-sort" id="qa-sort">高票優先 · 會前也能點菜</span></h3><div id="questions">讀取中…</div><form id="question-form"><label>想聽什麼實機細節？<textarea name="question_text" required maxlength="2000" placeholder="把你的好奇，留給講者。"></textarea></label><label class="check"><input name="is_anonymous" type="checkbox"> 匿名發問（系統保留帳號供權限驗證）</label><button>送出提問</button></form>`;
-  dialog.showModal();
-  $("#close-detail").onclick = () => dialog.close();
-  $("#project").onclick = () => run(() => project(s));
+  if (!s) return;
+  $("#view").innerHTML =
+    `<button id="back-discover" class="ghost">← 返回專案探索</button><header class="project-heading"><img src="${esc(coverFor(s))}" alt="${esc(s.title)}的封面" width="800" height="520"><div><div class="eyebrow">PROJECT SPACE</div><span class="badge">${esc(s.category_tag)}</span><h1>${esc(s.title)}</h1><p class="sub">${esc(s.summary)}</p><div class="actions"><button id="project">▶ 全螢幕投影</button><button id="space-vote" class="secondary">♡ 我想聽 · ${s.votes}</button>${user?.id === s.owner_id ? '<button id="edit-current" class="ghost">編輯專案</button>' : ""}</div></div></header><nav class="project-tabs" aria-label="專案內容">${[
+      ["discussions", "專案討論"],
+      ["overview", "專案介紹與資源"],
+      ["qa", "講者 Q&A"],
+    ]
+      .map(
+        ([id, label]) =>
+          `<button data-hub="${id}" class="${hubTab === id ? "active" : ""}" ${hubTab === id ? 'aria-current="page"' : ""}>${label}</button>`,
+      )
+      .join(
+        "",
+      )}</nav><section id="project-content" aria-live="polite"></section>`;
+  if (s.has_cover && !s.cover_image)
+    void loadSpaceCover(s).then((url) => {
+      const img = $<HTMLImageElement>(".project-heading>img");
+      if (url && img && currentSpace?.id === s.id) img.src = url;
+    });
+  $("#back-discover").onclick = () => {
+    page = "stage";
+    location.hash = "stage";
+    render();
+  };
+  $("#project").onclick = () => void run(() => project(s));
   $("#space-vote").onclick = () =>
-    run(async () => {
+    void run(async () => {
       await send("vote", { target_type: "space", target_id: s.id });
       toast("已記錄您的一票");
     });
-  if ($("#edit-current"))
-    $("#edit-current").onclick = () => {
-      dialog.close();
-      editSpace(s);
-    };
-  document
-    .querySelectorAll<HTMLElement>("#detail [data-vibe]")
-    .forEach((b) => (b.onclick = () => run(() => vibe(s.id, b.dataset.vibe!))));
-  $("#question-form").onsubmit = (e) => {
-    e.preventDefault();
-    run(async () => {
-      const f = new FormData(e.target as HTMLFormElement);
-      await send("question", {
-        space_id: s.id,
-        question_text: f.get("question_text"),
-        is_anonymous: f.get("is_anonymous") === "on",
+  if ($("#edit-current")) $("#edit-current").onclick = () => editSpace(s);
+  document.querySelectorAll<HTMLElement>("[data-hub]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        hubTab = b.dataset.hub!;
+        if (hubTab !== "discussions") {
+          selectedThread = undefined;
+          history.replaceState(null, "", `#project/${s.id}`);
+        }
+        void run(renderProject);
+      }),
+  );
+  const root = $("#project-content");
+  if (hubTab === "overview") {
+    root.innerHTML = `<div class="panel"><h2>關於這個專案</h2><p class="thread-body">${esc(s.summary)}</p><div class="actions">${(s.highlights ?? []).map((v: string) => `<span class="badge">${esc(v)}</span>`).join("")}</div><h3>延伸資源與參考連結</h3>${(s.reference_links ?? []).map(safeLink).join("") || '<p class="sub">分享者尚未提供延伸資源。</p>'}<div class="actions">${vibeButtons()}</div></div>`;
+    root
+      .querySelectorAll<HTMLElement>("[data-vibe]")
+      .forEach(
+        (b) => (b.onclick = () => void run(() => vibe(s.id, b.dataset.vibe!))),
+      );
+    return;
+  }
+  if (hubTab === "qa") {
+    root.innerHTML = `<div class="panel"><h2>講者 Q&A</h2><p class="sub">會前點菜與現場提問集中在這裡；延伸交流請到專案討論開啟主題。</p><h3>Slido 問答牆 <span class="qa-sort">高票優先</span></h3><div id="questions"></div><form id="question-form"><label>想請教講者什麼？<textarea name="question_text" required maxlength="2000"></textarea></label><label class="check"><input name="is_anonymous" type="checkbox">匿名發問</label><button>送出提問</button></form></div>`;
+    $("#question-form").onsubmit = (ev) => {
+      ev.preventDefault();
+      void run(async () => {
+        const form = ev.target as HTMLFormElement,
+          f = new FormData(form);
+        await send("question", {
+          space_id: s.id,
+          question_text: f.get("question_text"),
+          is_anonymous: f.get("is_anonymous") === "on",
+        });
+        form.reset();
+        await loadQuestions(s);
       });
-      (e.target as HTMLFormElement).reset();
-      await loadQuestions(s);
-    });
-  };
-  await loadQuestions(s);
-  if (qaPoll) clearInterval(qaPoll);
-  qaPoll = setInterval(() => {
-    if (dialog.open) void run(() => loadQuestions(s));
-  }, 10000);
-  dialog.onclose = () => {
+    };
+    await loadQuestions(s);
     if (qaPoll) clearInterval(qaPoll);
-    qaPoll = null;
-  };
+    qaPoll = setInterval(() => {
+      if ($("#questions")) void run(() => loadQuestions(s));
+    }, 10000);
+    return;
+  }
+  if (s.visibility === "private") {
+    root.innerHTML =
+      '<div class="empty">此專案仍為私人草稿，發布後即可開啟專屬討論區。</div>';
+    return;
+  }
+  await mountForum(root, {
+    client,
+    demo,
+    space: s,
+    actorId: user?.id,
+    admin: profile?.role === "admin",
+    threadId: selectedThread,
+    send,
+    review,
+    toast,
+    navigate: (thread) => void run(() => openSpace(s.id, thread)),
+  });
 }
 function safeLink(l: any) {
   try {
@@ -637,8 +787,7 @@ async function project(s: any) {
     )
     .subscribe();
   qaPoll = setInterval(() => {
-    if (currentSpace && $("#detail").hasAttribute("open"))
-      void loadQuestions(currentSpace);
+    if (currentSpace && $("#questions")) void loadQuestions(currentSpace);
   }, 10000);
 }
 function navigate(delta: number) {
@@ -941,7 +1090,7 @@ function editSpace(s: any = {}) {
         "text",
         false,
       ) +
-      `<label>發布狀態<select name="visibility"><option value="private" ${s.visibility !== "public" ? "selected" : ""}>🔒 私人草稿</option><option value="public" ${s.visibility === "public" ? "selected" : ""}>🌐 全院公開</option></select></label><label>上傳自包含 HTML（10–15 張）<input id="html-upload" type="file" accept=".html,text/html"></label><p id="upload-state" class="sub">${s.slide_count ? `已儲存 ${s.slide_count} 張；未上傳新檔會保留原檔。` : "尚未上傳投影片。"}</p><details><summary>用 AI 從大綱生成投影片</summary>${area("7 分鐘分享大綱", "outline", "", false)}<button id="generate" type="button" class="secondary">✳ 生成 10–15 張 HTML 投影片</button></details><label>參考連結（每行：分類 | 標題 | https://網址）<textarea name="links" placeholder="開源專案 | 專案名稱 | https://github.com/...">${esc((s.reference_links ?? []).map((l: any) => `${l.label} | ${l.title} | ${l.url}`).join("\n"))}</textarea></label><p class="sub">允許分類：工具官網、Prompt 範本、開源專案、臨床指引。儲存前會執行個資檢查。</p>`,
+      `<label>發布狀態<select name="visibility"><option value="private" ${s.visibility !== "public" ? "selected" : ""}>🔒 私人草稿</option><option value="public" ${s.visibility === "public" ? "selected" : ""}>🌐 全院公開</option></select></label><label>專案封面（JPG／PNG／WebP，請勿包含病患資料）<input id="cover-upload" type="file" accept="image/jpeg,image/png,image/webp"></label><p id="cover-state" class="sub">${s.has_cover || s.cover_image ? "已設定專案封面；未選新圖會保留。" : "未上傳時使用示意封面。"}</p><button id="clear-cover" type="button" class="ghost">移除自訂封面</button><label>上傳自包含 HTML（10–15 張）<input id="html-upload" type="file" accept=".html,text/html"></label><p id="upload-state" class="sub">${s.slide_count ? `已儲存 ${s.slide_count} 張；未上傳新檔會保留原檔。` : "尚未上傳投影片。"}</p><details><summary>用 AI 從大綱生成投影片</summary>${area("7 分鐘分享大綱", "outline", "", false)}<button id="generate" type="button" class="secondary">✳ 生成 10–15 張 HTML 投影片</button></details><label>參考連結（每行：分類 | 標題 | https://網址）<textarea name="links" placeholder="開源專案 | 專案名稱 | https://github.com/...">${esc((s.reference_links ?? []).map((l: any) => `${l.label} | ${l.title} | ${l.url}`).join("\n"))}</textarea></label><p class="sub">允許分類：工具官網、Prompt 範本、開源專案、臨床指引。儲存前會執行個資檢查。</p>`,
     async (f) => {
       const links = String(f.get("links"))
         .split("\n")
@@ -963,6 +1112,7 @@ function editSpace(s: any = {}) {
           .filter(Boolean),
         reference_links: links,
       };
+      if (coverImage !== undefined) payload.cover_image = coverImage;
       if (s.id) payload.id = s.id;
       if (uploadedHTML !== undefined) payload.html_slides = uploadedHTML;
       await send("upsert", payload);
@@ -973,6 +1123,45 @@ function editSpace(s: any = {}) {
     },
   );
   let uploadedHTML: string | undefined;
+  let coverImage: string | null | undefined;
+  $("#clear-cover").onclick = () => {
+    coverImage = null;
+    $("#cover-state").textContent = "儲存後將恢復示意封面。";
+  };
+  $<HTMLInputElement>("#cover-upload").onchange = (ev) =>
+    void run(async () => {
+      const file = (ev.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      if (
+        !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+        file.size > 10000000
+      )
+        throw Error("請選擇 10 MB 以內的 JPG、PNG 或 WebP");
+      const bitmap = await createImageBitmap(file);
+      try {
+        const canvas = document.createElement("canvas");
+        const scale = Math.min(1, 960 / bitmap.width, 640 / bitmap.height);
+        canvas.width = Math.round(bitmap.width * scale);
+        canvas.height = Math.round(bitmap.height * scale);
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#f5f6f2";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        let result = "";
+        for (const quality of [0.8, 0.6, 0.4]) {
+          result = canvas.toDataURL("image/jpeg", quality);
+          if (result.length <= 220000) break;
+        }
+        if (result.length > 220000)
+          throw Error("圖片仍太大，請改用較簡單的畫面截圖");
+        coverImage = result;
+        $("#cover-state").textContent =
+          "封面已在本機載入，儲存後更新。圖片內容需由您確認不含個資。";
+      } finally {
+        bitmap.close();
+      }
+    });
+
   $<HTMLInputElement>("#html-upload").onchange = (e) =>
     run(async () => {
       const file = (e.target as HTMLInputElement).files?.[0];
@@ -1162,7 +1351,20 @@ async function init() {
       if (user) await refreshProfile();
     }
     if (profile?.passcode_verified) await load();
-    render();
+    const link = location.hash.match(
+      /^#project\/([0-9a-f-]{36})(?:\/thread\/([0-9a-f-]{36}))?$/i,
+    );
+    const pending = sessionStorage
+      .getItem("ntucc-project-link")
+      ?.match(/^#project\/([0-9a-f-]{36})(?:\/thread\/([0-9a-f-]{36}))?$/i);
+    const target = link ?? pending;
+    if (target && profile?.passcode_verified) {
+      sessionStorage.removeItem("ntucc-project-link");
+      await openSpace(target[1], target[2], !link);
+    } else {
+      if (link) sessionStorage.setItem("ntucc-project-link", link[0]);
+      render();
+    }
     if (client && profile?.passcode_verified) {
       client
         .channel("registration-updates")
@@ -1196,6 +1398,23 @@ client?.auth.onAuthStateChange((event) => {
     document
       .querySelectorAll<HTMLDialogElement>("dialog[open]")
       .forEach((d) => d.close());
+    render();
+  }
+});
+window.addEventListener("popstate", () => {
+  const link = location.hash.match(/^#project\/([^/]+)(?:\/thread\/([^/]+))?$/);
+  if (link && (profile?.passcode_verified || demoEntered))
+    void run(() =>
+      openSpace(
+        decodeURIComponent(link[1]),
+        link[2] ? decodeURIComponent(link[2]) : undefined,
+        false,
+      ),
+    );
+  else if (profile?.passcode_verified || demoEntered) {
+    page = navs.some((n) => n[0] === location.hash.slice(1))
+      ? location.hash.slice(1)
+      : "announcements";
     render();
   }
 });

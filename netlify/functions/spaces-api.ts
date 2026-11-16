@@ -1,3 +1,4 @@
+import { discussionAction } from "./shared/discussions.js";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { authenticate, admin, db, hashToken } from "./shared/auth-helper.js";
@@ -51,6 +52,18 @@ export default async (req: Request) => {
       ? "rest_api"
       : "web_ui";
     switch (action) {
+      case "thread_create":
+      case "thread_reply":
+      case "thread_moderate":
+        return json(
+          await discussionAction(
+            action,
+            payload,
+            force_override,
+            actor,
+            channel,
+          ),
+        );
       case "upsert":
         return json({
           id: await upsertSpace(
