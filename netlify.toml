@@ -1,0 +1,31 @@
+[build]
+command = "npm run build"
+publish = "dist"
+functions = "netlify/functions"
+[functions]
+node_bundler = "esbuild"
+[functions.chat]
+timeout = 60
+[[redirects]]
+from = "/api/v1/spaces/*"
+to = "/.netlify/functions/spaces-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/spaces"
+to = "/.netlify/functions/spaces-api"
+status = 200
+[[redirects]]
+from = "/api/*"
+to = "/.netlify/functions/:splat"
+status = 200
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
+[[headers]]
+for = "/*"
+[headers.values]
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "no-referrer"
+Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
+Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
