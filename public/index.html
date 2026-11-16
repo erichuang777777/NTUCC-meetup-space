@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#126759" />
+    <title>NTUCC Meetup Spaces｜臺大癌醫內部交流</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="toast" role="status"></div>
+    <dialog id="pii">
+      <h2>🛡️ 送出前，確認個資安全</h2>
+      <p>偵測到可能的醫療個資。以下內容仍留在您的裝置上。</p>
+      <div id="pii-items"></div>
+      <label class="check"
+        ><input id="responsibility" type="checkbox" />
+        我已逐一確認這些內容非病患個資，願為放行負責。</label
+      >
+      <div class="actions">
+        <button id="pii-mask">一鍵遮罩並送出</button
+        ><button id="pii-override" class="secondary" disabled>
+          確認非個資，仍然放行</button
+        ><button id="pii-cancel" class="ghost">返回修改</button>
+      </div>
+    </dialog>
+    <dialog id="detail"></dialog>
+    <dialog id="scanner">
+      <div class="row">
+        <h2>掃描現場 QR Code</h2>
+        <button id="scan-close" class="ghost">關閉相機</button>
+      </div>
+      <video id="scan-video" style="width: 100%" muted playsinline></video>
+      <p class="sub">請將 QR Code 對準畫面。</p>
+    </dialog>
+    <dialog id="player">
+      <div class="player-tools">
+        <strong id="phase">演示期</strong><span id="countdown">10:00</span
+        ><button id="timer-start">開始計時</button
+        ><button id="prev-slide">←</button><span id="page-count">1 / 10</span
+        ><button id="next-slide">→</button
+        ><button id="fullscreen">全螢幕</button
+        ><button id="close-player">結束投影 ×</button>
+      </div>
+      <progress id="slide-progress" value="1" max="10"></progress
+      ><iframe
+        id="slide-frame"
+        sandbox="allow-scripts"
+        referrerpolicy="no-referrer"
+        title="隔離投影片播放器"
+      ></iframe>
+      <div id="stage-question" hidden></div>
+      <div id="player-vibes"></div>
+      <div id="bubbles" aria-live="polite"></div>
+    </dialog>
+    <script type="module" src="/app.ts"></script>
+  </body>
+</html>
