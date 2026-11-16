@@ -972,3 +972,35 @@ footer {
     margin-top: 26px;
   }
 }
+/* Compact sharing titles and category labels. */
+.card h3 {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 12px 0 8px;
+  font-weight: 650;
+}
+.card .badge {
+  font-size: 10px;
+  padding: 4px 7px;
+  font-weight: 500;
+}
+#detail > h2 {
+  font-size: 18px;
+  line-height: 1.6;
+}
+#detail > .row > .badge {
+  font-size: 10px;
+  padding: 4px 7px;
+}
+.access-gate {
+  max-width: 620px;
+  margin: auto;
+  padding: 70px 24px;
+}
+.card .preview {
+  height: 108px;
+  font-size: 23px;
+}
+.tabs button {
+  font-size: 11px;
+}

@@ -8,8 +8,10 @@ insert into spaces(id,owner_id,title,summary,visibility) values('10000000-0000-4
 insert into space_slides values('10000000-0000-4000-8000-000000000001','private html'),('10000000-0000-4000-8000-000000000002','public html');
 insert into space_qa(space_id,author_id,is_anonymous,question_text) values('10000000-0000-4000-8000-000000000002','00000000-0000-4000-8000-000000000001',true,'Anonymous test');
 set local role anon;
-do $$begin if(select count(*) from spaces)<>1 then raise exception 'Guest leaked private spaces';end if;if exists(select 1 from qa_public where author_name<>'匿名同仁') then raise exception 'Anonymous identity leak';end if;
- begin perform * from space_slides;raise exception 'Guest can read slides';exception when insufficient_privilege then null;end;
+do $$declare t text;begin
+ foreach t in array array['spaces','space_slides','qa_public','pain_points','announcements','meetup_sessions'] loop
+  begin execute format('select * from public.%I',t);raise exception 'Guest can read %',t;exception when insufficient_privilege then null;end;
+ end loop;
  begin insert into announcements(title,category,content) values('bad','活動公告','bad');raise exception 'Guest can write';exception when insufficient_privilege then null;end;
 end$$;
 reset role;
@@ -24,9 +26,11 @@ do $$begin if(select count(*) from spaces)<>2 then raise exception 'Owner cannot
  begin perform token_hash from user_api_tokens;raise exception 'Token hash exposed';exception when insufficient_privilege then null;end;
 end$$;
 select set_config('request.jwt.claim.sub','00000000-0000-4000-8000-000000000004',true);
-do $$begin if verify_ntucc_passcode('wrong') then raise exception 'Wrong passcode accepted';end if;if not verify_ntucc_passcode('integration-test-secret') then raise exception 'Correct passcode rejected';end if;end$$;
+do $$begin if (select count(*) from spaces)<>0 or (select count(*) from qa_public)<>0 then raise exception 'Unverified user can read shares';end if;if verify_ntucc_passcode('wrong') then raise exception 'Wrong passcode accepted';end if;if not verify_ntucc_passcode('integration-test-secret') then raise exception 'Correct passcode rejected';end if;end$$;
 reset role;
+select set_config('request.jwt.claim.sub','',true);
 set local role service_role;
+do $$begin if (select count(*) from qa_public)<>1 then raise exception 'Trusted backend cannot read safe QA';end if;end$$;
 select cast_vote('00000000-0000-4000-8000-000000000001','space','10000000-0000-4000-8000-000000000002');
 select cast_vote('00000000-0000-4000-8000-000000000001','space','10000000-0000-4000-8000-000000000002');
 do $$begin if(select votes from spaces where id='10000000-0000-4000-8000-000000000002')<>1 then raise exception 'Duplicate vote counted';end if;

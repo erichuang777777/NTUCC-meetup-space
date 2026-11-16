@@ -1,3 +1,5 @@
+> 最新產品決策：活動、分享、問答與痛點限登入且通過院內密語的同仁瀏覽，訪客不再具有公開唯讀權限。REST、MCP 與資料庫皆實施門禁；public 表示院內可見。教育積分功能已取消，活動不限午間。以下 Final v1.0 歷史描述若有衝突，以此更新及 002 migration 為準。
+
 # NTUCC Meetup Spaces — 系統開發規格書
 
 Final v1.0 · 依使用者提供的開發規格建立，以下包含功能要求及本次實作決策。正式名稱：NTUCC Meetup Spaces（臺大癌醫內部交流與 AI 展示空間）；專案代號：ntucc-meetup-spaces；既有 GitHub repository：erichuang777777/NTUCC-meetup-space。

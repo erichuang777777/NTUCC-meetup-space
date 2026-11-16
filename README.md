@@ -1,3 +1,7 @@
+> 更新：分享與問答已改為院內成員限定。訪客與尚未通關的帳號不可讀取任何活動／分享內容；下方早期「公開唯讀」說明由此更新取代。public visibility 現在代表「已驗證院內成員可見」。
+>
+> 已執行 001 的專案：請另行在 Supabase SQL Editor 執行 `supabase/migrations/002_members_only.sql`，無須重跑 001。新專案須依序執行 001、002。Netlify 也需部署本次 API 更新。
+
 # NTUCC Meetup Spaces
 
 臺大癌醫內部交流與 AI 展示空間。單一講者、10 分鐘展示、Slido 問答、痛點許願池與雙層 PII 防護。
@@ -12,11 +16,11 @@ cp .env.example .env
 npm run dev
 ```
 
-首頁先顯示登入畫面，Google 登入後預設進入公布欄，功能導覽以底部 SVG 圖示列呈現。未設定 Supabase 時可透過登入頁的「預覽介面」進入**示例預覽模式**，所有示例卡片都有整體模式提示，不會寫入資料。`npm run dev` 只提供前端；需要 API 時用 Netlify CLI 的 `netlify dev`，並將 `APP_ORIGIN` 設為實際本機來源（例如 `http://localhost:8888`）。
+首頁先顯示登入畫面，Google 登入後預設進入公布欄，功能導覽以底部 SVG 圖示列呈現。僅本機開發環境未設定 Supabase 時可透過登入頁的「預覽介面」進入**示例預覽模式**，所有示例卡片都有整體模式提示，不會寫入資料。`npm run dev` 只提供前端；需要 API 時用 Netlify CLI 的 `netlify dev`，並將 `APP_ORIGIN` 設為實際本機來源（例如 `http://localhost:8888`）。
 
 ## Supabase 設定
 
-1. 建立 Supabase 專案，在 SQL Editor 執行 [migration](supabase/migrations/001_init_schema.sql)。新專案需啟用 Vault（標準 Supabase 專案已提供）、pgcrypto、Realtime。不要在既有正式資料庫重複執行初始 migration。
+1. 建立 Supabase 專案，在 SQL Editor 依序執行 [001 migration](supabase/migrations/001_init_schema.sql) 與 [002 migration](supabase/migrations/002_members_only.sql)。新專案需啟用 Vault（標準 Supabase 專案已提供）、pgcrypto、Realtime。不要在既有正式資料庫重複執行初始 migration。
 2. 在 Supabase Dashboard 的 Vault 建立 secret：名稱 `ntucc_passcode`，值為院方自行設定的通關密語。勿把密語放入前端或 Git。
 3. 啟用 Google OAuth，設定 Google OAuth client、Supabase callback URI、Site URL，以及 Netlify 網站／本機 Redirect URLs。
 4. 先用 Google 登入建立 profile，再由維運者在 SQL Editor 指定管理員：
@@ -50,7 +54,7 @@ where email = 'YOUR_ADMIN_EMAIL';
 
 ## REST API
 
-- `GET /api/v1/spaces`：公開 metadata 清單，絕不含 HTML。
+- `GET /api/v1/spaces`：已通關同仁可讀的 metadata 清單，絕不含 HTML。
 - `GET /api/v1/spaces/{uuid}/slides`：已通關 Bearer 身分可讀公開展示，或自己的私人草稿。
 - `POST /api/v1/spaces`：以原始 JSON 建立或完整更新自己的展示；`id` 省略表示建立。更新時未提供的可選 metadata 會採預設值；省略 `html_slides` 保留原投影片。僅允許 HTTPS 參考連結。
 
@@ -86,7 +90,7 @@ where email = 'YOUR_ADMIN_EMAIL';
 }
 ```
 
-提供 `meetup://spaces/public`、`meetup://spaces/{id}/slides`、`search_pain_points`、`upsert_my_space`、`post_slido_question`。公開清單與痛點搜尋不要求 Token，投影片原始碼依門禁規則要求已通關 Token。MCP tool 執行錯誤依 JSON-RPC 回傳 `isError`，其中包含 `PII_DETECTED` 與 detected_items；REST 則使用 HTTP 422。
+提供 `meetup://spaces/public`、`meetup://spaces/{id}/slides`、`search_pain_points`、`upsert_my_space`、`post_slido_question`。所有 MCP 請求皆要求已通關 Token，投影片原始碼依門禁規則要求已通關 Token。MCP tool 執行錯誤依 JSON-RPC 回傳 `isError`，其中包含 `PII_DETECTED` 與 detected_items；REST 則使用 HTTP 422。
 
 **協定相容性**：鎖定的官方 MCP SDK 最新協商版本為 `2025-11-25`，支援 `WebStandardStreamableHTTPServerTransport` 與 `sessionIdGenerator: undefined`。原規格列出的 `2026-07-28` 不在這個 SDK 的支援清單，沒有偽造該版本。需要升級 SDK 並重新執行互通驗收後，才能宣告支援該日期。
 
@@ -100,7 +104,7 @@ where email = 'YOUR_ADMIN_EMAIL';
 - 報名唯一鍵改為 `(user_id, session_id)`，避免一人終生只能報名一場。活動開始時間以院內當地時間（建議臺灣時間）輸入，不作使用者時區轉換。
 - QR 相機掃描與貼上均可用；同仁自助掃描本期報到 URL，管理員掃描 UUID 型識別證。院內實際員工證格式、員工編號對應與外部身分系統尚未提供，未宣稱已完成該院務系統串接。現場 URL 可被轉傳，目前不保證實體在場。
 - 工作人員使用 admin 權限；排入本期的講者可查看本期報名名單並協助報到。CSV 匯出限 admin。
-- 報到與共鳴使用 Supabase Realtime；問答每 10 秒同步，Q&A 階段將最高票未回答問題顯示於投影角落。報名統計提供即時訂閱更新。全院公開資料也對未登入訪客可見，符合本版 guest-read-only 決策；若院方要求內網門禁，應於部署層加強驗證。
+- 報到與共鳴使用 Supabase Realtime；問答每 10 秒同步，Q&A 階段將最高票未回答問題顯示於投影角落。報名統計提供即時訂閱更新。全院分享僅限登入且通過院內密語的同仁瀏覽；訪客不可讀取活動、分享、問答或痛點。
 - 尚未部署、建立外部專案、修改 repository 可見性或注入正式密鑰。
 
 ## 驗證
