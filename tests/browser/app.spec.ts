@@ -46,7 +46,7 @@ test("mobile layout fits viewport", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "重要的事，在這裡知道。" }),
   ).toBeVisible();
-  await expect(page.locator(".bottom-nav button svg")).toHaveCount(5);
+  await expect(page.locator(".bottom-nav button svg")).toHaveCount(6);
   await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await expect(page.locator("article.card")).toHaveCount(3);
   expect(
@@ -194,4 +194,43 @@ test("PII confirmation runs before a forum topic is posted", async ({
   await page.getByRole("button", { name: "一鍵遮罩並送出" }).click();
   await expect(page.locator(".thread-opening")).toContainText("[病歷號已遮罩]");
   await expect(page.locator(".thread-opening")).not.toContainText("12345678");
+});
+
+test("project contact opens a private inbox preview, guards PII and supports blocking", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
+  await page.locator(".project-cover").first().click();
+  await page.getByRole("button", { name: "聯絡分享者", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "把交流，接著聊下去。" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "專案分享者", exact: true }),
+  ).toBeVisible();
+  await page.locator("#send-message textarea").fill("MRN: 12345678");
+  await page.getByRole("button", { name: "傳送站內私訊", exact: true }).click();
+  await expect(page.locator("#pii")).toBeVisible();
+  await page.getByRole("button", { name: "一鍵遮罩並送出" }).click();
+  await expect(page.locator(".message-history")).toContainText(
+    "[病歷號已遮罩]",
+  );
+  await expect(page.locator(".message-history")).not.toContainText("12345678");
+  await page.getByRole("button", { name: "封鎖對方", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "傳送站內私訊", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "解除封鎖", exact: true })
+    .last()
+    .click();
+  await expect(
+    page.getByRole("button", { name: "傳送站內私訊", exact: true }),
+  ).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
 });

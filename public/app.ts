@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { mountMessages } from "./messages";
 import { mountForum, coverFor } from "./forum";
 import { createClient } from "@supabase/supabase-js";
 import { scanValue, maskValue } from "./pii";
@@ -42,8 +43,10 @@ const navs = [
   ["registration", "活動報名"],
   ["pain", "痛點許願池"],
   ["workspace", "我的工作空間"],
+  ["messages", "同仁訊息"],
 ];
 const iconPaths: Record<string, string> = {
+  messages: '<path d="M4 4h16v12H9l-5 4V4Z"/><path d="M8 8h8M8 12h5"/>',
   announcements:
     '<path d="M4 10v4h4l9 4V6l-9 4H4Z"/><path d="m8 14 1 6h3l-2-5M20 9v6"/>',
   stage:
@@ -253,6 +256,8 @@ let hubTab = "discussions";
 let galleryMode = "swipe";
 let coverObserver: IntersectionObserver | null = null;
 let selectedThread: string | undefined;
+let contactTarget: string | undefined;
+let contactProject: string | undefined;
 function render() {
   coverObserver?.disconnect();
   if (qaPoll) clearInterval(qaPoll);
@@ -333,6 +338,23 @@ function render() {
       render();
     });
   switch (page) {
+    case "messages":
+      $("#view").innerHTML = '<p class="sub">正在載入同仁訊息…</p>';
+      void run(() =>
+        mountMessages($("#view"), {
+          actorId: user?.id ?? "demo-me",
+          demo,
+          recipientId: contactTarget,
+          projectId: contactProject,
+          request: agentRequest,
+          review,
+          toast,
+          openProject: (id) => void run(() => openSpace(id)),
+        }),
+      );
+      contactTarget = undefined;
+      contactProject = undefined;
+      break;
     case "project":
       $("#view").innerHTML = '<p class="sub">正在開啟專案…</p>';
       void run(renderProject);
@@ -517,7 +539,7 @@ async function renderProject() {
   const s = currentSpace;
   if (!s) return;
   $("#view").innerHTML =
-    `<button id="back-discover" class="ghost">← 返回專案探索</button><header class="project-heading"><img src="${esc(coverFor(s))}" alt="${esc(s.title)}的封面" width="800" height="520"><div><div class="eyebrow">PROJECT SPACE</div><span class="badge">${esc(s.category_tag)}</span><h1>${esc(s.title)}</h1><p class="sub">${esc(s.summary)}</p><div class="actions"><button id="project">▶ 全螢幕投影</button><button id="space-vote" class="secondary">♡ 我想聽 · ${s.votes}</button>${user?.id === s.owner_id ? '<button id="edit-current" class="ghost">編輯專案</button>' : ""}</div></div></header><nav class="project-tabs" aria-label="專案內容">${[
+    `<button id="back-discover" class="ghost">← 返回專案探索</button><header class="project-heading"><img src="${esc(coverFor(s))}" alt="${esc(s.title)}的封面" width="800" height="520"><div><div class="eyebrow">PROJECT SPACE</div><span class="badge">${esc(s.category_tag)}</span><h1>${esc(s.title)}</h1><p class="sub">${esc(s.summary)}</p><div class="actions"><button id="project">▶ 全螢幕投影</button>${user?.id !== s.owner_id ? '<button id="contact-owner" class="ghost">聯絡分享者</button>' : ""}<button id="space-vote" class="secondary">♡ 我想聽 · ${s.votes}</button>${user?.id === s.owner_id ? '<button id="edit-current" class="ghost">編輯專案</button>' : ""}</div></div></header><nav class="project-tabs" aria-label="專案內容">${[
       ["discussions", "專案討論"],
       ["overview", "專案介紹與資源"],
       ["qa", "講者 Q&A"],
@@ -545,6 +567,14 @@ async function renderProject() {
       await send("vote", { target_type: "space", target_id: s.id });
       toast("已記錄您的一票");
     });
+  if ($("#contact-owner"))
+    $("#contact-owner").onclick = () => {
+      contactTarget = s.owner_id;
+      contactProject = s.id;
+      page = "messages";
+      history.pushState(null, "", "#messages");
+      render();
+    };
   if ($("#edit-current")) $("#edit-current").onclick = () => editSpace(s);
   document.querySelectorAll<HTMLElement>("[data-hub]").forEach(
     (b) =>
@@ -607,6 +637,35 @@ async function renderProject() {
     toast,
     navigate: (thread) => void run(() => openSpace(s.id, thread)),
   });
+}
+async function agentRequest(method: string, path: string, payload?: any) {
+  if (!requireMember()) throw Error("請先登入並通關");
+  let input = payload;
+  if (payload?.body) {
+    const checked = await review(payload);
+    if (!checked) throw Error("已返回修改");
+    input = { ...checked.payload, force_override: checked.force_override };
+  }
+  const session = (await client!.auth.getSession()).data.session;
+  const response = await fetch("/api/v1/agent/" + path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + session?.access_token,
+    },
+    ...(method === "POST" ? { body: JSON.stringify(input) } : {}),
+  });
+  const result = await response.json();
+  if (!response.ok) {
+    const messages: Record<string, string> = {
+      CONTACT_UNAVAILABLE: "對方目前不接受聯絡，或此聯絡已停用。",
+      TOKEN_SCOPE_REQUIRED: "這組 Token 尚未開啟私訊權限。",
+      RATE_LIMITED: "本小時的傳送次數已達上限，請稍後再試。",
+      CONVERSATION_NOT_FOUND: "找不到這個對話，或您沒有讀取權限。",
+    };
+    throw Error(messages[result.code] ?? result.code ?? "請求失敗");
+  }
+  return result;
 }
 function safeLink(l: any) {
   try {
@@ -1006,6 +1065,16 @@ function painForm() {
   );
 }
 async function workspace() {
+  if (demo) {
+    $("#view").innerHTML =
+      heading(
+        "YOUR AGENT CONNECTION",
+        "讓你的 Agent，也能加入交流。",
+        "從自己的工具發布專案、閱讀討論，並以本人的身分回覆與聯絡。",
+      ) +
+      `<div class="panel"><h2>個人 API Token</h2><p class="sub">正式網站登入並通關後，可在這裡產生專屬 Token。明文只顯示一次，可隨時撤銷。</p><span class="badge">專案讀取與發布</span> <span class="badge">討論與回覆</span><label class="check"><input type="checkbox" disabled>選用：開放 Agent 讀取及傳送我的站內私訊</label><p class="muted">預覽不會產生正式 Token；既有 Token 也不會自動取得私訊權限。</p></div><div class="panel"><h2>Agent 可以幫你做什麼？</h2><p class="sub">發布自己的專案與參考資源<br>瀏覽同仁公開專案，閱讀主題與回覆<br>以自己的身分回覆討論<br>經你開放權限後，讀取自己的收件匣並聯絡同仁</p><p class="sub">支援 REST API 與 MCP。私訊只對雙方開放，不公開 Email。</p></div>`;
+    return;
+  }
   if (!profile?.passcode_verified) {
     $("#view").innerHTML = heading(
       "YOUR PRIVATE WORKSPACE",
@@ -1025,7 +1094,7 @@ async function workspace() {
     read(
       client!
         .from("user_api_tokens")
-        .select("id,token_prefix,created_at,last_used_at")
+        .select("id,token_prefix,created_at,last_used_at,scopes")
         .eq("user_id", user.id),
     ),
   ]);
@@ -1035,7 +1104,7 @@ async function workspace() {
       "自己的小實驗，自己掌舵。",
       "私人草稿只有你能讀取。準備好了，再分享給全院同仁。",
     ) +
-    `<div class="row"><h2>我的展示</h2><button id="new-draft">＋ 新增展示</button></div>${mySpaces.map((s) => `<div class="panel row"><div><span class="badge">${s.visibility === "private" ? "🔒 私人草稿" : "🌐 全院公開"}</span><h3>${esc(s.title)}</h3><span class="muted">${s.slide_count} 張投影片</span></div><div class="actions"><button class="ghost" data-preview="${s.id}">預覽</button><button class="secondary" data-edit="${s.id}">編輯</button></div></div>`).join("") || '<div class="empty">還沒有草稿。從一個大綱開始吧。</div>'}<div class="panel"><h2>個人資料</h2><form id="profile-form">${field("顯示名稱", "display_name", profile.display_name)}${field("科別／部門", "department", profile.department)}<button>更新資料</button></form></div><div class="panel"><div class="row"><h2>個人 Agent API Token</h2><button id="new-token" class="secondary">產生 Token</button></div><p class="sub">供 Claude Code、Cursor 等 Agent 使用。Token 僅建立當下顯示一次，請妥善保存。</p><div id="token-once"></div>${tokens.map((t) => `<div class="list-item row"><code>${esc(t.token_prefix)}…</code><span class="muted">${esc(t.last_used_at?.slice(0, 10) ?? "尚未使用")}</span><button class="danger" data-revoke="${t.id}">撤銷</button></div>`).join("")}<details><summary>Agent 連線設定</summary><pre>${esc(JSON.stringify({ mcpServers: { "ntucc-meetup-spaces": { url: location.origin + "/api/mcp", transport: "streamable-http", headers: { Authorization: "Bearer ${NTUCC_PERSONAL_TOKEN}" } } } }, null, 2))}</pre></details></div>`;
+    `<div class="row"><h2>我的展示</h2><button id="new-draft">＋ 新增展示</button></div>${mySpaces.map((s) => `<div class="panel row"><div><span class="badge">${s.visibility === "private" ? "🔒 私人草稿" : "🌐 全院公開"}</span><h3>${esc(s.title)}</h3><span class="muted">${s.slide_count} 張投影片</span></div><div class="actions"><button class="ghost" data-preview="${s.id}">預覽</button><button class="secondary" data-edit="${s.id}">編輯</button></div></div>`).join("") || '<div class="empty">還沒有草稿。從一個大綱開始吧。</div>'}<div class="panel"><h2>個人資料</h2><form id="profile-form">${field("顯示名稱", "display_name", profile.display_name)}${field("科別／部門", "department", profile.department)}<button>更新資料</button></form></div><div class="panel"><div class="row"><h2>個人 Agent API Token</h2><button id="new-token" class="secondary">產生 Token</button></div><p class="sub">供 Claude Code、Cursor 等 Agent 使用。Token 僅建立當下顯示一次，請妥善保存。</p><label class="check"><input id="token-messages" type="checkbox">允許此 Token 讀取及傳送我的站內私訊（選用）</label><p class="sub">既有 Token 不會自動取得私訊權限。需要時請重新產生並勾選。</p><div id="token-once"></div>${tokens.map((t) => `<div class="list-item row"><code>${esc(t.token_prefix)}…</code><span class="badge">${t.scopes?.includes("messages:read") ? "含站內私訊" : "專案與討論"}</span><span class="muted">${esc(t.last_used_at?.slice(0, 10) ?? "尚未使用")}</span><button class="danger" data-revoke="${t.id}">撤銷</button></div>`).join("")}<details><summary>Agent 連線設定</summary><pre>${esc(JSON.stringify({ mcpServers: { "ntucc-meetup-spaces": { url: location.origin + "/api/mcp", transport: "streamable-http", headers: { Authorization: "Bearer ${NTUCC_PERSONAL_TOKEN}" } } } }, null, 2))}</pre></details><details><summary>REST API 與 Agent 能做什麼？</summary><p class="sub">GET /api/v1/agent/projects：瀏覽專案<br>GET /api/v1/agent/projects/{id}/discussions：查看討論<br>POST /api/v1/agent/discussions/{id}/replies：回覆討論<br>GET /api/v1/agent/inbox：讀取自己的私訊<br>POST /api/v1/agent/messages：站內聯絡同仁（需私訊權限）</p><p class="sub">每個請求皆使用 Authorization: Bearer 您的個人Token。MCP 同步提供 list_projects、read_discussion、reply_to_discussion、send_private_message 等工具。</p></details></div>`;
   $("#new-draft").onclick = () => editSpace();
   document
     .querySelectorAll<HTMLElement>("[data-preview]")
@@ -1062,7 +1131,9 @@ async function workspace() {
   };
   $("#new-token").onclick = () =>
     run(async () => {
-      const { token } = await send("token_create");
+      const { token } = await send("token_create", {
+        include_messages: $<HTMLInputElement>("#token-messages").checked,
+      });
       $("#token-once").innerHTML =
         `<p class="sub">請現在複製，離開後將無法再次查看。</p><div class="token-once">${esc(token)}</div><button id="hide-token" class="ghost">已保存，隱藏 Token</button>`;
       $("#hide-token").onclick = () => void run(workspace);

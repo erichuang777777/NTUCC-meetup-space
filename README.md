@@ -136,3 +136,11 @@ npm audit
 新增 API action：`thread_create`、`thread_reply`、`thread_moderate`，均要求已通關 Bearer 身分；發布與回覆合計每人每小時最多 40 次。所有作者與 moderator 身分由伺服器決定，前端不得直接寫入資料表。私人草稿的討論資料即使對 admin 也不開放，發布後才開啟互動。論壇提供 `#project/{uuid}` 與 `#project/{uuid}/thread/{uuid}` 深連結；訪客仍需先登入與通關。
 
 Sites／本機示例中的論壇新增與回覆僅保留在當次頁面預覽的記憶體，重新整理會還原，並不假裝已寫入正式 Supabase。SQL 權限與計數驗證見 `tests/discussions.sql`。
+
+## 個人 Agent API 與站內聯絡
+
+新增 `/api/v1/agent/*` 和 MCP 對應工具，供同仁以個人 Token 發布自己的專案、閱讀院內公開專案與討論、開啟主題及回覆。專案頁可「聯絡分享者」，底部「同仁訊息」可查看自己的私訊、設定接收偏好及封鎖對方。
+
+**部署前請依序確認 001、002、003 已執行，再執行 `004_agent_contacts.sql`**。這會新增私訊資料表、RLS、聯絡偏好、封鎖與 Token scopes。既有 Token 預設只有專案／討論權限，不會自動取得私訊權限；需在工作空間產生新 Token 時額外勾選。Token 管理限互動登入，既有 Token 無法再產生權限更高的 Token。
+
+完整端點、範例、MCP 工具與錯誤說明見 [API_GUIDE.md](API_GUIDE.md)。私訊只對雙方開放，admin 沒有讀取其他人對話的例外；不公開 Email、不發送 Email。發送、封鎖、限流與重試去重在資料庫內執行，私訊內容仍經 PII Guard。

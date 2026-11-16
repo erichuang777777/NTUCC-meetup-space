@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { db, type Actor } from "./auth-helper.js";
+import { db, requireScope, type Actor } from "./auth-helper.js";
 import { checked, HttpError } from "./http.js";
 import { guard } from "./pii-guard.js";
 const uuid = z.string().uuid();
@@ -41,8 +41,9 @@ export async function discussionAction(
   payload: unknown,
   override: boolean,
   actor: Actor,
-  channel: "web_ui" | "rest_api",
+  channel: "web_ui" | "rest_api" | "mcp_server",
 ) {
+  requireScope(actor, "discussions:write");
   if (action === "thread_create") {
     const p = createSchema.parse(payload);
     await publicSpace(p.space_id);

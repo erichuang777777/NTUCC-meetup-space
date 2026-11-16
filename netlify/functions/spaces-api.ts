@@ -1,7 +1,14 @@
 import { discussionAction } from "./shared/discussions.js";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { authenticate, admin, db, hashToken } from "./shared/auth-helper.js";
+import {
+  authenticate,
+  admin,
+  db,
+  hashToken,
+  requireInteractive,
+  requireScope,
+} from "./shared/auth-helper.js";
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
 import { LIST, upsertSpace, question, slides } from "./shared/spaces.js";
 import { guard } from "./shared/pii-guard.js";
@@ -26,7 +33,7 @@ export default async (req: Request) => {
     const path = new URL(req.url).pathname;
     const tail = path.replace(/^.*\/(?:spaces-api|spaces)\/?/, "");
     if (req.method === "GET") {
-      await authenticate(req);
+      requireScope((await authenticate(req))!, "projects:read");
       if (!tail)
         return json(
           checked(
@@ -51,6 +58,22 @@ export default async (req: Request) => {
       ?.startsWith("Bearer ntucc_sk_")
       ? "rest_api"
       : "web_ui";
+    if (!["token_create", "token_revoke"].includes(action)) {
+      requireScope(
+        actor,
+        action === "registrations"
+          ? "projects:read"
+          : [
+                "question",
+                "thread_create",
+                "thread_reply",
+                "thread_moderate",
+                "resolve",
+              ].includes(action)
+            ? "discussions:write"
+            : "projects:write",
+      );
+    }
     switch (action) {
       case "thread_create":
       case "thread_reply":
@@ -88,6 +111,17 @@ export default async (req: Request) => {
         return json({ ok: true });
       }
       case "token_create": {
+        requireInteractive(actor);
+        const { include_messages = false } = z
+          .object({ include_messages: z.boolean().default(false) })
+          .parse(payload);
+        const scopes = [
+          "projects:read",
+          "projects:write",
+          "discussions:read",
+          "discussions:write",
+          ...(include_messages ? ["messages:read", "messages:write"] : []),
+        ];
         const token = "ntucc_sk_" + randomBytes(32).toString("hex");
         checked(
           await db()
@@ -96,11 +130,13 @@ export default async (req: Request) => {
               user_id: actor.id,
               token_prefix: token.slice(0, 16),
               token_hash: hashToken(token),
+              scopes,
             }),
         );
         return json({ token }, 201);
       }
       case "token_revoke":
+        requireInteractive(actor);
         checked(
           await db()
             .from("user_api_tokens")

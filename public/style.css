@@ -1314,3 +1314,150 @@ footer {
     font-size: 18px;
   }
 }
+.inbox-layout {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.inbox-list,
+.message-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 20px;
+}
+.inbox-list h2 {
+  font-size: 16px;
+  margin-top: 0;
+}
+.inbox-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 9px;
+  padding: 13px 8px;
+  color: #3a5a45;
+  background: transparent;
+  text-align: left;
+  font-weight: 400;
+}
+.inbox-person.active {
+  background: #e9f0e4;
+}
+.inbox-person > span:nth-child(2) {
+  flex: 1;
+}
+.inbox-person strong {
+  font-size: 12px;
+  display: block;
+}
+.inbox-person small {
+  display: block;
+  color: #8a988b;
+  font-size: 10px;
+  margin-top: 5px;
+}
+.inbox-list .actions button {
+  font-size: 10px;
+  padding: 7px;
+}
+.message-panel h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.message-panel header .sub {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+.message-panel header button {
+  padding: 8px;
+  font-size: 11px;
+}
+.message-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 550px;
+  overflow: auto;
+  padding: 25px 2px;
+}
+.message-bubble {
+  max-width: 85%;
+  align-self: flex-start;
+  background: #f0f3ec;
+  border-radius: 13px 13px 13px 2px;
+  padding: 13px 16px;
+}
+.message-bubble.outgoing {
+  align-self: flex-end;
+  background: #e5eee0;
+  border-radius: 13px 13px 2px 13px;
+}
+.message-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.message-bubble small {
+  display: block;
+  color: #889884;
+  font-size: 9px;
+  margin-top: 8px;
+}
+.message-bubble button {
+  font-size: 10px;
+  padding: 6px;
+  margin-top: 8px;
+}
+.contact-settings code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.contact-settings .row button {
+  font-size: 11px;
+}
+.contact-settings summary {
+  font-size: 13px;
+  cursor: pointer;
+}
+.message-panel form textarea {
+  min-height: 90px;
+}
+.message-panel form button {
+  font-size: 12px;
+}
+.bottom-nav button {
+  width: 80px;
+}
+@media (max-width: 850px) {
+  .inbox-layout {
+    grid-template-columns: 1fr;
+  }
+  .inbox-list {
+    padding: 16px;
+  }
+  .inbox-person {
+    padding: 10px;
+  }
+  .inbox-list .actions {
+    margin-top: 8px;
+  }
+  .message-panel {
+    padding: 18px;
+  }
+  .message-bubble {
+    max-width: 92%;
+  }
+}
+@media (max-width: 760px) {
+  .bottom-nav button {
+    width: auto;
+  }
+  .bottom-nav span {
+    font-size: 8px;
+  }
+}
