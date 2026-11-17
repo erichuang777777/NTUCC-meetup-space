@@ -3,7 +3,7 @@ create role anon;
 create role authenticated;
 create role service_role bypassrls;
 create schema auth;
-create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}');
+create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}',email_confirmed_at timestamptz default now(),raw_app_meta_data jsonb default '{"provider":"google","providers":["google"]}');
 create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
 create schema extensions;
 create schema vault;

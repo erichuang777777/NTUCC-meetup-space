@@ -32,7 +32,7 @@ update public.profiles set role = 'admin'
 where email = 'YOUR_ADMIN_EMAIL';
 ```
 
-管理員仍須完成通關驗證。前端不能設定 role 或 passcode_verified。
+首位管理員仍須完成通關驗證。此 SQL 僅供首次建立管理員；後續可使用下方「網頁成員管理」。一般前端不能直接修改 role 或 passcode_verified。
 5. 在 Supabase API 設定中確認 exposed schema 為 `public`。不要對匿名角色額外授予資料表寫入權限、`space_qa` 讀取權限或 privileged RPC execute 權限。
 
 ## Netlify 部署
@@ -148,3 +148,19 @@ Sites／本機示例中的論壇新增與回覆僅保留在當次頁面預覽的
 ## 極簡介面
 
 頁面改為白底與清單，移除重複標語、卡片外框及多餘按鈕。探索頁以圖片與標題為主，篩選使用單一選單；專案頁直接呈現討論，介紹與 Q&A 以摺疊區塊展開。投影、聯絡與管理功能收在「⋯」選單；個人資料及 Agent 設定也預設收合。這次只調整介面，不需新增 SQL 或環境變數。
+
+
+## 網頁成員管理與 Google 帳號邀請
+
+既有專案在部署此次更新前，請在 Supabase SQL Editor **執行一次** [005_member_management.sql](supabase/migrations/005_member_management.sql)（須已完成 001–004）。新專案依序執行全部 migrations。此後不必逐人進 Supabase 設定權限。
+
+1. 以已通關的管理員登入，開啟「管理 → 成員」。
+2. 既有成員可切換為「一般成員」或「管理員」。不能在此變更自己的角色，以免失去後台權限。
+3. 新同仁點「邀請同仁」，輸入對方的 Google 登入 Email 並指定角色。複製產生的連結，自行傳給對方；系統不會自動寄信。
+4. 對方開啟連結，用完全相同 Email 的 Google 帳號登入，再按接受邀請，即可取得指定權限，不必另外輸入通關密語。邀請 7 天有效，可在待接受清單撤銷；重新邀請同一 Email 會使舊連結失效。
+
+一般成員可以管理自己的分享、參與討論與依設定聯絡同仁。管理員另可發布活動／公告、管理報到、排程與成員；不會因此取得其他人的私人草稿或私訊。撤銷邀請只會停用未接受的連結，不會移除既有成員。
+
+這裡新增的是網站成員資格，**不會建立 Google 帳號**。對方須已有 Google 帳號。若 Google OAuth 應用程式仍處於 Testing，仍需到 Google Cloud 加入測試使用者，或完成正式發布；網站邀請不能繞過 Google 的限制。
+
+Netlify 的 `APP_ORIGIN` 請設為正式網站 origin，例如 `https://YOUR_SITE.netlify.app`，讓邀請連結指向正確網站。邀請明文只在建立時顯示，資料庫僅存 SHA-256；請把連結視為秘密，勿貼到公開討論區。成員角色異動、邀請建立／撤銷／接受均會留下稽核紀錄。管理 API 僅接受互動式管理員登入，不接受個人 Agent Token。

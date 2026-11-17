@@ -240,3 +240,102 @@ test("project contact opens a private inbox preview, guards PII and supports blo
     fullPage: true,
   });
 });
+
+test("member management supports role updates and invitation creation/revocation in a compact UI", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    const { mountMemberAdmin } = await import(String("/member-admin.ts"));
+    const own = "00000000-0000-4000-8000-000000000001",
+      other = "00000000-0000-4000-8000-000000000002";
+    const members = [
+      {
+        id: own,
+        email: "admin@example.test",
+        display_name: "管理員",
+        department: "資訊",
+        role: "admin",
+        passcode_verified: true,
+      },
+      {
+        id: other,
+        email: "member@example.test",
+        display_name: "同仁",
+        department: "行政",
+        role: "member",
+        passcode_verified: true,
+      },
+    ];
+    let invitations: any[] = [];
+    await mountMemberAdmin(document.querySelector("#app"), {
+      ownId: own,
+      toast: (message: string) => ((window as any).testToast = message),
+      back: () => {},
+      request: async (method: string, p: any) => {
+        if (method === "GET")
+          return { members, total: members.length, invitations };
+        if (p.action === "role") {
+          members.find((v) => v.id === p.user_id)!.role = p.role;
+          return {};
+        }
+        if (p.action === "invite") {
+          invitations.push({
+            id: "invite",
+            email: p.email,
+            role: p.role,
+            expires_at: new Date(Date.now() + 86400000).toISOString(),
+          });
+          return {
+            email: p.email,
+            role: p.role,
+            token: "ntucc_inv_" + "a".repeat(64),
+          };
+        }
+        if (p.action === "revoke") {
+          invitations = [];
+          return { ok: true };
+        }
+      },
+    });
+  });
+  await expect(page.getByLabel("管理員的權限", { exact: true })).toBeDisabled();
+  await page.getByLabel("同仁的權限", { exact: true }).selectOption("admin");
+  await expect(page.getByLabel("同仁的權限", { exact: true })).toHaveValue(
+    "admin",
+  );
+  await page.getByRole("button", { name: "邀請同仁", exact: true }).click();
+  await page.getByLabel("Google 帳號信箱").fill("newperson@example.test");
+  await page.getByRole("button", { name: "產生邀請連結" }).click();
+  await expect(page.locator("#invitation-link")).toHaveValue(
+    /#invite=ntucc_inv_/,
+  );
+  await page.getByRole("button", { name: "完成", exact: true }).click();
+  await page
+    .locator("details")
+    .filter({ hasText: "待接受的邀請" })
+    .locator("summary")
+    .click();
+  await expect(
+    page.getByText("newperson@example.test", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "撤銷", exact: true }).click();
+  await page
+    .locator("details")
+    .filter({ hasText: "待接受的邀請" })
+    .locator("summary")
+    .click();
+  await expect(page.getByText("沒有待接受的邀請")).toBeVisible();
+});
+test("an invitation fragment is retained for OAuth without exposing its secret in the address bar", async ({
+  page,
+}) => {
+  const token = "ntucc_inv_" + "b".repeat(64);
+  await page.goto("/#invite=" + token);
+  await expect(page.getByText("請使用受邀的 Google 帳號登入。")).toBeVisible();
+  expect(page.url()).not.toContain("#invite=");
+  expect(
+    await page.evaluate(() => sessionStorage.getItem("ntucc-member-invite")),
+  ).toBe(token);
+  await expect(page.locator(".bottom-nav")).toHaveCount(0);
+});

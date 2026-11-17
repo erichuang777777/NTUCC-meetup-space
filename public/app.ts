@@ -1,9 +1,17 @@
 /// <reference types="vite/client" />
+import { mountMemberAdmin } from "./member-admin";
 import { mountMessages } from "./messages";
 import { mountForum, coverFor } from "./forum";
 import { createClient } from "@supabase/supabase-js";
 import { scanValue, maskValue } from "./pii";
 import { sandboxDocument } from "./player";
+const inviteFragment = location.hash.match(
+  /^#invite=(ntucc_inv_[a-f0-9]{64})$/,
+);
+if (inviteFragment) {
+  sessionStorage.setItem("ntucc-member-invite", inviteFragment[1]);
+  history.replaceState(null, "", location.pathname + location.search);
+}
 const url = import.meta.env.VITE_SUPABASE_URL,
   key = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const client = url && key ? createClient(url, key) : null;
@@ -66,13 +74,18 @@ async function signIn() {
   if (!client) throw Error("尚未連接登入服務，可先使用下方的介面預覽。");
   const { error } = await client.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: location.origin },
+    options: {
+      redirectTo: location.origin,
+      ...(sessionStorage.getItem("ntucc-member-invite")
+        ? { queryParams: { prompt: "select_account" } }
+        : {}),
+    },
   });
   if (error) throw error;
 }
 function loginView() {
   $("#app").innerHTML =
-    `<main class="login-page"><div class="login-art" role="img" aria-label="臺大癌醫同仁共同交流 AI 與工作經驗的插畫"></div><section class="login-card"><a class="login-brand" href="/">${icon("stage")} NTUCC <span>MEETUP SPACES</span></a><h1>登入</h1><p class="login-description">臺大癌醫交流空間</p><button id="login-google" class="login-google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 12.2c0-.7-.1-1.4-.2-2.2H12v4h5a4.5 4.5 0 0 1-5 3.8 5.8 5.8 0 1 1 0-11.6c1.5 0 2.7.5 3.7 1.4l2.9-2.8A10 10 0 1 0 12 22c5.8 0 9-4 9-9.8Z"/></svg>使用 Google 帳號登入<span>↗</span></button><p class="login-note">首次登入需驗證院內通關密語。</p>${allowDemo ? '<button id="demo-enter" class="login-demo">預覽介面（示例資料） →</button>' : ""}</section></main>`;
+    `<main class="login-page"><div class="login-art" role="img" aria-label="臺大癌醫同仁共同交流 AI 與工作經驗的插畫"></div><section class="login-card"><a class="login-brand" href="/">${icon("stage")} NTUCC <span>MEETUP SPACES</span></a><h1>登入</h1><p class="login-description">臺大癌醫交流空間</p><button id="login-google" class="login-google"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21 12.2c0-.7-.1-1.4-.2-2.2H12v4h5a4.5 4.5 0 0 1-5 3.8 5.8 5.8 0 1 1 0-11.6c1.5 0 2.7.5 3.7 1.4l2.9-2.8A10 10 0 1 0 12 22c5.8 0 9-4 9-9.8Z"/></svg>使用 Google 帳號登入<span>↗</span></button><p class="login-note">${sessionStorage.getItem("ntucc-member-invite") ? "請使用受邀的 Google 帳號登入。" : "首次登入需驗證院內通關密語。"}</p>${allowDemo ? '<button id="demo-enter" class="login-demo">預覽介面（示例資料） →</button>' : ""}</section></main>`;
   $("#login-google").onclick = () => void run(signIn);
   if (allowDemo)
     $("#demo-enter").onclick = () =>
@@ -265,6 +278,39 @@ function render() {
     loginView();
     return;
   }
+  const invite = sessionStorage.getItem("ntucc-member-invite");
+  if (user && invite) {
+    $("#app").innerHTML =
+      `<main class="access-gate"><a class="login-brand" href="/">NTUCC Meetup Spaces</a><h1>加入交流空間</h1><p class="sub">目前帳號：${esc(user.email)}</p><p class="sub">接受後將依邀請設定開通網站權限。</p><div class="actions"><button id="accept-invitation">接受邀請</button><button id="invitation-switch" class="ghost">切換帳號</button><button id="invitation-skip" class="ghost">略過</button></div></main>`;
+    $("#accept-invitation").onclick = () =>
+      void run(async () => {
+        const button = $<HTMLButtonElement>("#accept-invitation");
+        button.disabled = true;
+        try {
+          await membersRequest("POST", { action: "accept", token: invite });
+          sessionStorage.removeItem("ntucc-member-invite");
+          await refreshProfile();
+          await load();
+          page = "announcements";
+          render();
+        } finally {
+          if (button.isConnected) button.disabled = false;
+        }
+      });
+    $("#invitation-switch").onclick = () =>
+      void run(async () => {
+        const { error } = await client!.auth.signOut();
+        if (error) throw error;
+        user = null;
+        profile = null;
+        render();
+      });
+    $("#invitation-skip").onclick = () => {
+      sessionStorage.removeItem("ntucc-member-invite");
+      render();
+    };
+    return;
+  }
   if (user && !profile?.passcode_verified) {
     $("#app").innerHTML =
       `<main class="access-gate"><a class="login-brand" href="/">NTUCC Meetup Spaces</a>${gate()}<button id="gate-signout" class="ghost">登出</button></main>`;
@@ -302,7 +348,7 @@ function render() {
     return;
   }
   $("#app").innerHTML =
-    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">預覽 · 示例資料</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id || (page === "project" && id === "stage") ? 'aria-current="page"' : ""} class="${page === id || (page === "project" && id === "stage") ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
+    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">預覽 · 示例資料</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id || (page === "project" && id === "stage") || (page === "members" && id === "admin") ? 'aria-current="page"' : ""} class="${page === id || (page === "project" && id === "stage") || (page === "members" && id === "admin") ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -333,6 +379,26 @@ function render() {
       render();
     });
   switch (page) {
+    case "members":
+      if (profile?.role !== "admin") {
+        page = "announcements";
+        render();
+        break;
+      }
+      $("#view").innerHTML = '<p class="sub">載入成員…</p>';
+      void run(() =>
+        mountMemberAdmin($("#view"), {
+          ownId: user.id,
+          request: membersRequest,
+          toast,
+          back: () => {
+            page = "admin";
+            location.hash = "admin";
+            render();
+          },
+        }),
+      );
+      break;
     case "messages":
       $("#view").innerHTML = '<p class="sub">正在載入同仁訊息…</p>';
       void run(() =>
@@ -598,6 +664,35 @@ async function renderProject() {
     toast,
     navigate: (thread) => void run(() => openSpace(s.id, thread)),
   });
+}
+async function membersRequest(method: string, payload?: any, query = "") {
+  const session = (await client!.auth.getSession()).data.session;
+  if (!session) throw Error("請先登入");
+  const response = await fetch("/api/members" + query, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + session.access_token,
+    },
+    ...(method === "POST" ? { body: JSON.stringify(payload) } : {}),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    const messages: Record<string, string> = {
+      ADMIN_REQUIRED: "只有管理員能操作。",
+      INTERACTIVE_LOGIN_REQUIRED: "請從網站登入後操作。",
+      INVITATION_INVALID: "邀請已失效、過期或遭撤銷，請向管理員索取新連結。",
+      INVITE_ACCOUNT_MISMATCH: "請切換為受邀的 Google 帳號。",
+      GOOGLE_LOGIN_REQUIRED: "請使用 Google 帳號登入。",
+      SELF_ROLE_CHANGE_FORBIDDEN: "不能更改自己的管理員權限。",
+      LAST_ADMIN: "必須保留至少一位管理員。",
+      MEMBER_NOT_VERIFIED: "該成員尚未完成驗證。",
+      INVITATION_NOT_PENDING: "此邀請已接受或撤銷。",
+      RATE_LIMITED: "操作次數已達上限，請稍後再試。",
+    };
+    throw Error(messages[data.code] ?? "操作失敗，請稍後再試。");
+  }
+  return data;
 }
 async function agentRequest(method: string, path: string, payload?: any) {
   if (!requireMember()) throw Error("請先登入並通關");
@@ -1246,7 +1341,12 @@ async function adminView() {
       "把相聚的細節，準備好。",
       "管理活動、公告、展示順序與現場報到。管理員無法讀取同仁的私人草稿。",
     ) +
-    `<div class="actions"><button id="new-session">建立活動場次</button><button id="new-announcement" class="secondary">發布公告</button></div><div class="panel"><h2>本期報名與餐盒統計</h2><div id="registration-report">${activeSession ? "讀取中…" : "請先建立活動場次。"}</div></div><div class="panel"><h2>10 分鐘議程順序</h2><p class="sub">每個時段含 7 分鐘演示與 3 分鐘 Q&A。順序從 0 起算。</p>${spaces.map((s) => `<div class="list-item row"><span>${esc(s.title)}</span><form data-schedule="${s.id}" class="row"><input name="slot_order" type="number" min="0" max="100" value="${s.slot_order ?? 0}" aria-label="議程順序" style="width:75px"><button class="secondary">排入本期</button></form></div>`).join("")}</div>`;
+    `<div class="actions"><button id="new-session">建立活動場次</button><button id="new-announcement" class="secondary">發布公告</button><button id="manage-members" class="ghost">成員</button></div><div class="panel"><h2>本期報名與餐盒統計</h2><div id="registration-report">${activeSession ? "讀取中…" : "請先建立活動場次。"}</div></div><div class="panel"><h2>10 分鐘議程順序</h2><p class="sub">每個時段含 7 分鐘演示與 3 分鐘 Q&A。順序從 0 起算。</p>${spaces.map((s) => `<div class="list-item row"><span>${esc(s.title)}</span><form data-schedule="${s.id}" class="row"><input name="slot_order" type="number" min="0" max="100" value="${s.slot_order ?? 0}" aria-label="議程順序" style="width:75px"><button class="secondary">排入本期</button></form></div>`).join("")}</div>`;
+  $("#manage-members").onclick = () => {
+    page = "members";
+    history.pushState(null, "", "#members");
+    render();
+  };
   $("#new-session").onclick = () =>
     formDialog(
       "建立新場次",

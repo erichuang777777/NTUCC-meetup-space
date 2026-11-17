@@ -942,3 +942,57 @@ dialog h2 {
   line-height: 1.9;
   color: #687a60;
 }
+.member-list {
+  margin: 14px 0 28px;
+}
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.member-row > div {
+  flex: 1;
+  min-width: 0;
+}
+.member-row strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 550;
+}
+.member-row .muted {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+}
+.member-row small {
+  display: block;
+  font-size: 10px;
+  color: #89947f;
+  margin-top: 5px;
+}
+.member-row select {
+  width: 115px;
+  font-size: 12px;
+}
+.member-invite-form {
+  max-width: 520px;
+}
+.member-invite-form button {
+  margin-top: 12px;
+}
+.workspace-section .list-item small {
+  display: block;
+  margin-top: 5px;
+}
+#member-search input {
+  background: #f8faf7;
+  border-color: transparent;
+}
+#invitation-link {
+  font-size: 11px;
+}
+.member-list + details {
+  margin-top: 20px;
+}
