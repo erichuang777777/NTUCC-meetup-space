@@ -129,3 +129,8 @@ POST `/messages`：
 原有 `upsert_my_space`、`post_slido_question` 繼續可用。MCP 錯誤依協定回傳工具 `isError`，內容保留對應 code。Token 沒有私訊 scope 時，私訊工具會拒絕執行。
 
 請讓 Agent 先讀取專案／討論，依你的指示決定是否回覆或聯絡；讀到其他人的留言，不代表已取得發送私訊的指示。
+
+
+## 成員管理邊界
+
+`/api/members` 是網站互動式管理介面使用的端點。成員查詢、角色變更與建立／撤銷邀請僅接受已通關管理員的 Google 登入 Session；個人 API Token 即使屬於管理員，也不能使用這些操作。接受邀請需要有效的 Google 登入 Session 與邀請秘密，並由後端核對帳號 Email；尚未通關者也可接受屬於自己的邀請。此功能不提供 MCP 工具，也不建立 Google 帳號或自動寄送 Email。

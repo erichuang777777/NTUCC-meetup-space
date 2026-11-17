@@ -37,6 +37,8 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/002_members_only.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/003_project_discussions.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/004_agent_contacts.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/005_member_management.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/rls.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/discussions.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/contacts.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/members.sql
