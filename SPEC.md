@@ -102,3 +102,15 @@ registrations 唯一鍵採 `(user_id, session_id)`，修正原 schema 的全域 
 ## 驗收與部署邊界
 
 程式包含本機預覽、安全測試、瀏覽器測試與 SQL RLS 測試。真實 Google OAuth、Supabase Realtime、雲端 LLM、Netlify Functions 執行與院內識別證整合需要正式帳號／設定驗收。未自動建立外部專案或更改 repository private 設定。設定與已知限制見 README。
+
+## 專案論壇擴充
+
+採「圖片探索牆 → 專案專屬討論區 → 主題與回覆」結構；同一 Space 的問題、心得、資源分享與既有 Slido Q&A 都在同一專案頁找到。主題與回覆綁定父層 ID，不提供跨專案混合留言區。採用有分頁的討論串、標題搜尋、分類與排序；owner/admin 可置頂、標記已解決與軟隱藏，不能跨越私人草稿的讀取隔離。
+
+新增 discussion_threads、discussion_replies、兩個成員限定的安全姓名 view、回覆計數／活動時間 Trigger，以及 spaces.cover_image。寫入沿用 PII Guard、通關與伺服器所有權驗證。實際 DDL 以 003_project_discussions.sql 為準。封面與圖像探索規格、API actions、配額與部署步驟見 README。
+
+## Agent 與同仁聯絡擴充
+
+個人 Token 提供專案介紹與討論的分頁讀取、本人專案發布、討論建立與回覆，並以明確額外 scope 開放本人的站內私訊讀寫。API 與 MCP 使用相同服務層，不公開 Email。新私訊只在雙方之間可讀，admin 無例外；接收者可停用或封鎖。
+
+新增 private_conversations、private_messages、contact_blocks、profiles.accepts_messages、user_api_tokens.scopes，以及 service-only 的私訊與封鎖 RPC。既有 Token 不自動升級私訊能力。詳見 004_agent_contacts.sql 與 API_GUIDE.md。

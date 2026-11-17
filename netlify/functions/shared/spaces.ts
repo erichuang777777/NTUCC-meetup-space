@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { parse } from "parse5";
-import { db, type Actor } from "./auth-helper.js";
+import { db, requireScope, type Actor } from "./auth-helper.js";
 import { HttpError, checked } from "./http.js";
 import { guard } from "./pii-guard.js";
 export const LIST =
-  "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,votes,vibe_counts,slot_order,session_id,visibility,created_at";
+  "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,has_cover,votes,vibe_counts,slot_order,session_id,visibility,created_at";
 export function slideCount(html: string) {
   let count = 0;
   const visit = (n: any) => {
@@ -42,6 +42,12 @@ export const spaceSchema = z
     visibility: z.enum(["private", "public"]).default("private"),
     html_slides: z.string().max(1_500_000).optional(),
     reference_links: z.array(link).max(20).default([]),
+    cover_image: z
+      .string()
+      .max(220000)
+      .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/)
+      .nullable()
+      .optional(),
     force_override: z.boolean().default(false),
   })
   .strict();
@@ -50,6 +56,7 @@ export async function upsertSpace(
   actor: Actor,
   channel: "web_ui" | "rest_api" | "mcp_server",
 ) {
+  requireScope(actor, "projects:write");
   const parsed = spaceSchema.safeParse(raw);
   if (!parsed.success)
     throw new HttpError(400, "INVALID_SPACE", {
@@ -81,11 +88,18 @@ export async function question(
   actor: Actor,
   channel: "web_ui" | "rest_api" | "mcp_server",
 ) {
+  requireScope(actor, "discussions:write");
   const p = z
     .object({
       space_id: z.string().uuid(),
       question_text: z.string().min(1).max(2000),
       is_anonymous: z.boolean().default(false),
+      cover_image: z
+        .string()
+        .max(220000)
+        .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/)
+        .nullable()
+        .optional(),
       force_override: z.boolean().default(false),
     })
     .parse(raw);
@@ -115,6 +129,7 @@ export async function question(
 }
 export async function slides(id: string, actor: Actor | null) {
   if (!actor) throw new HttpError(401, "AUTH_REQUIRED");
+  requireScope(actor, "projects:read");
   const client = db();
   const s = checked(
     await client

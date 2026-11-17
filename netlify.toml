@@ -7,6 +7,14 @@ node_bundler = "esbuild"
 [functions.chat]
 timeout = 60
 [[redirects]]
+from = "/api/v1/agent/*"
+to = "/.netlify/functions/agent-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/agent"
+to = "/.netlify/functions/agent-api"
+status = 200
+[[redirects]]
 from = "/api/v1/spaces/*"
 to = "/.netlify/functions/spaces-api/:splat"
 status = 200

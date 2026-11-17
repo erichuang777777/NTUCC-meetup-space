@@ -1004,3 +1004,460 @@ footer {
 .tabs button {
   font-size: 11px;
 }
+/* Image discovery and project-owned forum pages. */
+.discovery-actions {
+  margin: 26px 0;
+}
+.discovery-actions .actions {
+  margin: 0;
+}
+.gallery-controls {
+  margin-top: 18px;
+}
+.gallery-controls .actions,
+.gallery-position .actions {
+  margin: 0;
+}
+.gallery-controls button,
+.gallery-position button {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+.project-gallery {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding: 2px;
+  padding: 18px 2px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: #a9beaa transparent;
+}
+.project-gallery > .card {
+  flex: 0 0 calc((100% - 40px) / 3);
+  scroll-snap-align: start;
+  min-width: 0;
+}
+.project-cover {
+  padding: 0;
+  border-radius: 0;
+  background: #e5eee8;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+  display: block;
+  width: 100%;
+}
+.project-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 800/520;
+  object-fit: cover;
+  transition: transform 0.25s;
+}
+.project-cover:hover img {
+  transform: scale(1.025);
+}
+.cover-caption {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: #fffdf2ed;
+  border: 1px solid #fff8;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 10px;
+  color: #4d6b55;
+}
+.project-gallery .card h3 {
+  font-size: 14px;
+}
+.project-gallery .card-body > p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.gallery-position {
+  margin-bottom: 12px;
+}
+.project-gallery.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: visible;
+  scroll-snap-type: none;
+}
+.project-heading {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 30px;
+  margin: 28px 0;
+  align-items: center;
+}
+.project-heading > img {
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  aspect-ratio: 800/520;
+  object-fit: cover;
+}
+.project-heading h1 {
+  font-size: 24px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.project-heading p {
+  white-space: pre-wrap;
+}
+.project-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 25px;
+  overflow-x: auto;
+}
+.project-tabs button {
+  background: transparent;
+  color: #7a8c7e;
+  border-radius: 0;
+  padding: 14px 18px;
+  white-space: nowrap;
+  font-size: 13px;
+  border-bottom: 3px solid transparent;
+}
+.project-tabs button.active {
+  color: #126759;
+  border-bottom-color: #126759;
+}
+.forum-intro h2 {
+  margin-bottom: 4px;
+}
+.forum-intro .sub {
+  margin-top: 3px;
+}
+.forum-intro button {
+  font-size: 12px;
+}
+.forum-toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 18px 0;
+}
+.forum-toolbar form {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+.forum-toolbar form input {
+  font-size: 12px;
+  width: 190px;
+}
+.forum-toolbar select {
+  width: auto;
+  font-size: 12px;
+}
+.forum-toolbar form button {
+  padding: 8px;
+  font-size: 11px;
+}
+.topic-list {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.topic-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  border-radius: 0;
+  width: 100%;
+  padding: 21px 22px;
+  border-bottom: 1px solid var(--line);
+  background: white;
+  color: #284c3a;
+  font-weight: 400;
+}
+.topic-row:last-child {
+  border: 0;
+}
+.topic-row:hover {
+  background: #f5f9f0;
+}
+.topic-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: #e8efe2;
+  color: #5f7b56;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.topic-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+.topic-main strong {
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.topic-meta {
+  font-size: 10px;
+  color: #a38756;
+}
+.topic-count {
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  min-width: 36px;
+}
+.topic-count small {
+  display: block;
+  font-size: 9px;
+  color: #8b9a88;
+  margin-top: 4px;
+  font-weight: 400;
+}
+.forum-pagination {
+  margin: 12px 0;
+}
+.thread-body {
+  white-space: pre-wrap;
+  line-height: 1.9;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.thread-opening h2 {
+  font-size: 20px;
+  line-height: 1.6;
+}
+.reply {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+.reply .ghost {
+  font-size: 10px;
+  padding: 5px 9px;
+}
+.replies {
+  margin-bottom: 24px;
+}
+@media (max-width: 1100px) {
+  .project-gallery > .card {
+    flex-basis: calc((100% - 20px) / 2);
+  }
+  .project-gallery.gallery-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .project-heading {
+    grid-template-columns: 190px 1fr;
+    gap: 20px;
+  }
+}
+@media (max-width: 760px) {
+  .project-gallery > .card {
+    flex-basis: 88%;
+  }
+  .project-gallery.gallery-grid {
+    grid-template-columns: 1fr;
+  }
+  .project-heading {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .project-heading > img {
+    max-height: 200px;
+  }
+  .project-heading h1 {
+    font-size: 21px;
+  }
+  .project-tabs button {
+    font-size: 11px;
+    padding: 12px;
+  }
+  .forum-toolbar form {
+    margin-left: 0;
+    width: 100%;
+  }
+  .forum-toolbar form input {
+    width: 100%;
+  }
+  .forum-toolbar select {
+    flex: 1;
+  }
+  .topic-row {
+    padding: 17px 13px;
+    gap: 10px;
+  }
+  .topic-main strong {
+    font-size: 13px;
+  }
+  .forum-intro {
+    align-items: flex-start;
+  }
+  .reply {
+    gap: 10px;
+  }
+  .thread-opening h2 {
+    font-size: 18px;
+  }
+}
+.inbox-layout {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.inbox-list,
+.message-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 20px;
+}
+.inbox-list h2 {
+  font-size: 16px;
+  margin-top: 0;
+}
+.inbox-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border-radius: 9px;
+  padding: 13px 8px;
+  color: #3a5a45;
+  background: transparent;
+  text-align: left;
+  font-weight: 400;
+}
+.inbox-person.active {
+  background: #e9f0e4;
+}
+.inbox-person > span:nth-child(2) {
+  flex: 1;
+}
+.inbox-person strong {
+  font-size: 12px;
+  display: block;
+}
+.inbox-person small {
+  display: block;
+  color: #8a988b;
+  font-size: 10px;
+  margin-top: 5px;
+}
+.inbox-list .actions button {
+  font-size: 10px;
+  padding: 7px;
+}
+.message-panel h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.message-panel header .sub {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+.message-panel header button {
+  padding: 8px;
+  font-size: 11px;
+}
+.message-history {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 550px;
+  overflow: auto;
+  padding: 25px 2px;
+}
+.message-bubble {
+  max-width: 85%;
+  align-self: flex-start;
+  background: #f0f3ec;
+  border-radius: 13px 13px 13px 2px;
+  padding: 13px 16px;
+}
+.message-bubble.outgoing {
+  align-self: flex-end;
+  background: #e5eee0;
+  border-radius: 13px 13px 2px 13px;
+}
+.message-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.message-bubble small {
+  display: block;
+  color: #889884;
+  font-size: 9px;
+  margin-top: 8px;
+}
+.message-bubble button {
+  font-size: 10px;
+  padding: 6px;
+  margin-top: 8px;
+}
+.contact-settings code {
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.contact-settings .row button {
+  font-size: 11px;
+}
+.contact-settings summary {
+  font-size: 13px;
+  cursor: pointer;
+}
+.message-panel form textarea {
+  min-height: 90px;
+}
+.message-panel form button {
+  font-size: 12px;
+}
+.bottom-nav button {
+  width: 80px;
+}
+@media (max-width: 850px) {
+  .inbox-layout {
+    grid-template-columns: 1fr;
+  }
+  .inbox-list {
+    padding: 16px;
+  }
+  .inbox-person {
+    padding: 10px;
+  }
+  .inbox-list .actions {
+    margin-top: 8px;
+  }
+  .message-panel {
+    padding: 18px;
+  }
+  .message-bubble {
+    max-width: 92%;
+  }
+}
+@media (max-width: 760px) {
+  .bottom-nav button {
+    width: auto;
+  }
+  .bottom-nav span {
+    font-size: 8px;
+  }
+}

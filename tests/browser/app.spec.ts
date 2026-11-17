@@ -7,24 +7,27 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
   await page.goto("/");
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await expect(
-    page.getByRole("heading", { name: "重要的事，在這裡知道。" }),
+    page.getByRole("heading", { name: "公布欄", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "展示舞台", exact: true }).click();
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "把日常的小突破，變成大家的靈感。" }),
+    page.getByRole("heading", { name: "專案探索", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "💣 踩坑避雷", exact: true }).click();
+  await page.locator("#space-filter").selectOption("踩坑避雷");
   await expect(page.locator("article.card")).toHaveCount(1);
-  await page.getByRole("button", { name: "進入空間 ↗" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Slido 問答牆" }),
-  ).toBeVisible();
+  await page.locator(".project-cover").first().click();
+  await expect(page.locator(".topic-list")).toBeVisible();
+  await page.locator("#project-qa > summary").click();
+  await expect(page.locator("#questions")).toBeVisible();
+  await page.locator(".project-heading .action-menu > summary").click();
   await page.getByRole("button", { name: "▶ 全螢幕投影" }).click();
   await expect(page.locator("#toast")).toContainText("登入");
-  await page.getByRole("button", { name: "關閉 ×", exact: true }).click();
+  await page
+    .getByRole("button", { name: "← 返回專案探索", exact: true })
+    .click();
   await page.getByRole("button", { name: "痛點許願池", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "這個困擾，你也有嗎？" }),
+    page.getByRole("heading", { name: "痛點許願池", exact: true }),
   ).toBeVisible();
   expect(errors).toEqual([]);
   await page.screenshot({ path: "artifacts/desktop.png", fullPage: true });
@@ -38,10 +41,10 @@ test("mobile layout fits viewport", async ({ page }) => {
   await page.screenshot({ path: "artifacts/login-mobile.png", fullPage: true });
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await expect(
-    page.getByRole("heading", { name: "重要的事，在這裡知道。" }),
+    page.getByRole("heading", { name: "公布欄", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".bottom-nav button svg")).toHaveCount(5);
-  await page.getByRole("button", { name: "展示舞台", exact: true }).click();
+  await expect(page.locator(".bottom-nav button svg")).toHaveCount(6);
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await expect(page.locator("article.card")).toHaveCount(3);
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
@@ -124,4 +127,116 @@ test("login is the entry point even for deep links; returning to login hides nav
     page.getByRole("button", { name: "使用 Google 帳號登入" }),
   ).toBeVisible();
   await expect(page.locator(".bottom-nav")).toHaveCount(0);
+});
+
+test("image discovery opens an isolated project forum, topics and replies stay in that project", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
+  await expect(page.locator(".project-cover img")).toHaveCount(3);
+  await expect
+    .poll(() =>
+      page
+        .locator(".project-cover img")
+        .first()
+        .evaluate((img: HTMLImageElement) => img.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await page.locator(".project-cover").first().click();
+  await expect(page.locator(".topic-list")).toBeVisible();
+  expect(page.url()).toContain("#project/demo1");
+  await page.screenshot({
+    path: "artifacts/minimal-forum.png",
+    fullPage: true,
+  });
+  await page.getByRole("button", { name: "新增討論" }).click();
+  await page
+    .locator("#compose-topic input[name=title]")
+    .fill("測試：如何比較處理時間");
+  await page
+    .locator("#compose-topic textarea")
+    .fill("想使用合成資料測量前後的處理時間。");
+  await page.getByRole("button", { name: "發布討論", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "測試：如何比較處理時間" }),
+  ).toBeVisible();
+  expect(page.url()).toContain("/thread/");
+  await page
+    .locator("#reply-form textarea")
+    .fill("可以先記錄人工流程，再比較結果。");
+  await page.getByRole("button", { name: "送出回覆" }).click();
+  await expect(page.locator(".replies")).toContainText("可以先記錄人工流程");
+  await page.getByRole("button", { name: "← 返回這個專案的討論" }).click();
+  await expect(page.locator(".topic-list")).toContainText(
+    "測試：如何比較處理時間",
+  );
+  await page.getByRole("button", { name: "← 返回專案探索" }).click();
+  await page.locator(".project-cover").nth(1).click();
+  await expect(page.locator(".topic-list")).not.toContainText(
+    "測試：如何比較處理時間",
+  );
+});
+test("PII confirmation runs before a forum topic is posted", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
+  await page.locator(".project-cover").first().click();
+  await page.getByRole("button", { name: "新增討論" }).click();
+  await page.locator("#compose-topic input[name=title]").fill("測試資料檢查");
+  await page.locator("#compose-topic textarea").fill("MRN: 12345678");
+  await page.getByRole("button", { name: "發布討論", exact: true }).click();
+  await expect(page.locator("#pii")).toBeVisible();
+  await page.getByRole("button", { name: "一鍵遮罩並送出" }).click();
+  await expect(page.locator(".thread-opening")).toContainText("[病歷號已遮罩]");
+  await expect(page.locator(".thread-opening")).not.toContainText("12345678");
+});
+
+test("project contact opens a private inbox preview, guards PII and supports blocking", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
+  await page.getByRole("button", { name: "專案探索", exact: true }).click();
+  await page.locator(".project-cover").first().click();
+  await page.locator(".project-heading .action-menu > summary").click();
+  await page.getByRole("button", { name: "聯絡分享者", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "訊息", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "專案分享者", exact: true }),
+  ).toBeVisible();
+  await page.locator("#send-message textarea").fill("MRN: 12345678");
+  await page.getByRole("button", { name: "傳送站內私訊", exact: true }).click();
+  await expect(page.locator("#pii")).toBeVisible();
+  await page.getByRole("button", { name: "一鍵遮罩並送出" }).click();
+  await expect(page.locator(".message-history")).toContainText(
+    "[病歷號已遮罩]",
+  );
+  await expect(page.locator(".message-history")).not.toContainText("12345678");
+  await page.locator(".message-panel header .action-menu > summary").click();
+  await page.getByRole("button", { name: "封鎖對方", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "傳送站內私訊", exact: true }),
+  ).toBeDisabled();
+  await page.locator(".message-panel header .action-menu > summary").click();
+  await page
+    .getByRole("button", { name: "解除封鎖", exact: true })
+    .last()
+    .click();
+  await expect(
+    page.getByRole("button", { name: "傳送站內私訊", exact: true }),
+  ).toBeEnabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth),
+  ).toBeLessThanOrEqual(390);
+  await page.screenshot({
+    path: "artifacts/minimal-inbox.png",
+    fullPage: true,
+  });
 });

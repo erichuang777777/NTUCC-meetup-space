@@ -11,7 +11,19 @@ export function db() {
 }
 export const hashToken = (token: string) =>
   createHash("sha256").update(token).digest("hex");
-export type Actor = { id: string; role: string; passcode_verified: boolean };
+export type Actor = {
+  id: string;
+  role: string;
+  passcode_verified: boolean;
+  scopes?: string[];
+};
+export function requireScope(actor: Actor, scope: string) {
+  if (actor.scopes && !actor.scopes.includes(scope))
+    throw new HttpError(403, "TOKEN_SCOPE_REQUIRED", { required_scope: scope });
+}
+export function requireInteractive(actor: Actor) {
+  if (actor.scopes) throw new HttpError(403, "INTERACTIVE_LOGIN_REQUIRED");
+}
 export async function authenticate(
   req: Request,
   required = true,
@@ -23,16 +35,20 @@ export async function authenticate(
   }
   const client = db();
   let id: string;
+  let scopes: string[] | undefined;
   if (token.startsWith("ntucc_sk_")) {
     const entry = checked(
       await client
         .from("user_api_tokens")
-        .select("id,user_id")
+        .select("id,user_id,scopes")
         .eq("token_hash", hashToken(token))
         .maybeSingle(),
     );
     if (!entry) throw new HttpError(401, "INVALID_TOKEN");
     id = entry.user_id;
+    if (!Array.isArray(entry.scopes))
+      throw new HttpError(403, "TOKEN_SCOPE_REQUIRED");
+    scopes = entry.scopes;
     checked(
       await client
         .from("user_api_tokens")
@@ -52,7 +68,7 @@ export async function authenticate(
       .single(),
   ) as Actor;
   if (!profile.passcode_verified) throw new HttpError(403, "PASSCODE_REQUIRED");
-  return profile;
+  return { ...profile, scopes };
 }
 export function admin(actor: Actor) {
   if (actor.role !== "admin") throw new HttpError(403, "ADMIN_REQUIRED");
