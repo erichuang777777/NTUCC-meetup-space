@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ticketQr } from "./shared/ticket-qr.js";
 import { randomBytes } from "node:crypto";
 import {
   db,
@@ -8,9 +9,10 @@ import {
   requireInteractive,
 } from "./shared/auth-helper.js";
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
+import { guard } from "./shared/pii-guard.js";
 import { eventCalendar } from "./shared/event-calendar.js";
 const eventFields =
-  "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence";
+  "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence,checkin_opens_at,checkin_closes_at,agenda";
 const announcementFields = "id,title,content,created_at";
 const uuid = z.string().uuid();
 const eventSchema = z
@@ -19,9 +21,23 @@ const eventSchema = z
     title: z.string().trim().min(1).max(200),
     description: z.string().max(10000).default(""),
     location: z.string().max(500).default(""),
+    agenda: z
+      .array(
+        z
+          .object({
+            time: z.string().trim().min(1).max(30),
+            title: z.string().trim().min(1).max(200),
+            speaker: z.string().trim().max(100).optional(),
+          })
+          .strict(),
+      )
+      .max(30)
+      .default([]),
     starts_at: z.iso.datetime({ offset: true }),
     ends_at: z.iso.datetime({ offset: true }),
     registration_closes_at: z.iso.datetime({ offset: true }),
+    checkin_opens_at: z.iso.datetime({ offset: true }).nullable().optional(),
+    checkin_closes_at: z.iso.datetime({ offset: true }).nullable().optional(),
     capacity: z.number().int().min(1).max(10000),
     status: z.enum(["scheduled", "cancelled"]),
     is_published: z.boolean(),
@@ -32,6 +48,14 @@ const eventSchema = z
       Date.parse(e.ends_at) > Date.parse(e.starts_at) &&
       Date.parse(e.registration_closes_at) <= Date.parse(e.starts_at),
     "Invalid event dates",
+  )
+  .refine(
+    (e) =>
+      (!e.checkin_opens_at && !e.checkin_closes_at) ||
+      (!!e.checkin_opens_at &&
+        !!e.checkin_closes_at &&
+        Date.parse(e.checkin_closes_at) > Date.parse(e.checkin_opens_at)),
+    "Invalid check-in window",
   );
 const announcementSchema = z
   .object({
@@ -41,6 +65,14 @@ const announcementSchema = z
     is_published: z.boolean(),
   })
   .strict();
+function eligible(user: any) {
+  return (
+    !!user?.email_confirmed_at &&
+    !user.is_anonymous &&
+    !user.deleted_at &&
+    !(user.banned_until && Date.parse(user.banned_until) > Date.now())
+  );
+}
 async function eventActor(req: Request, interactive = false) {
   const token = req.headers.get("authorization")?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token) throw new HttpError(401, "AUTH_REQUIRED");
@@ -57,7 +89,7 @@ async function eventActor(req: Request, interactive = false) {
     if (!row || Date.parse(row.expires_at) <= Date.now())
       throw new HttpError(401, "INVALID_TOKEN");
     const { data, error } = await client.auth.admin.getUserById(row.user_id);
-    if (error || !data.user?.email_confirmed_at || data.user.is_anonymous)
+    if (error || !eligible(data.user))
       throw new HttpError(401, "INVALID_TOKEN");
     return row.user_id as string;
   }
@@ -65,8 +97,7 @@ async function eventActor(req: Request, interactive = false) {
     throw new HttpError(403, "EVENT_TOKEN_REQUIRED");
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) throw new HttpError(401, "INVALID_TOKEN");
-  if (!data.user.email_confirmed_at || data.user.is_anonymous)
-    throw new HttpError(403, "EMAIL_NOT_VERIFIED");
+  if (!eligible(data.user)) throw new HttpError(403, "EMAIL_NOT_VERIFIED");
   return data.user.id;
 }
 async function limited(id: string, action: string, max: number) {
@@ -79,7 +110,7 @@ async function limited(id: string, action: string, max: number) {
   );
   if (!ok) throw new HttpError(429, "RATE_LIMITED");
 }
-export default async function handler(req: Request) {
+export default async function handler(req: Request, context?: { ip?: string }) {
   try {
     const path = new URL(req.url).pathname
       .replace(/^.*\/(?:events-api|events)\/?/, "")
@@ -88,10 +119,129 @@ export default async function handler(req: Request) {
     const [id, child] = path;
     if (path.length > 2) throw new HttpError(404, "NOT_FOUND");
     const client = db();
-    if (id === "manage" && !child) {
+    if (id === "manage") {
       const actor = (await authenticate(req))!;
       requireInteractive(actor);
       admin(actor);
+      if (child === "unpublish") {
+        if (req.method !== "POST")
+          throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        const input = z
+          .object({ kind: z.enum(["event", "announcement"]), id: uuid })
+          .strict()
+          .parse(await body(req));
+        await limited(actor.id, "public_event_manage", 30);
+        return json(
+          checked(
+            await client
+              .from(
+                input.kind === "event"
+                  ? "public_events"
+                  : "public_announcements",
+              )
+              .update({ is_published: false })
+              .eq("id", input.id)
+              .select("id")
+              .single(),
+          ),
+        );
+      }
+      if (child === "staff") {
+        const input = z
+          .object({ event_id: uuid, user_id: uuid })
+          .strict()
+          .parse(await body(req));
+        if (!["POST", "DELETE"].includes(req.method))
+          throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        const profile = checked(
+          await client
+            .from("profiles")
+            .select("passcode_verified")
+            .eq("id", input.user_id)
+            .maybeSingle(),
+        );
+        if (req.method === "POST" && !profile?.passcode_verified)
+          throw new HttpError(403, "STAFF_MUST_BE_MEMBER");
+        await limited(actor.id, "public_event_manage", 30);
+        checked(
+          await (req.method === "POST"
+            ? client.from("event_staff").upsert(input)
+            : client
+                .from("event_staff")
+                .delete()
+                .eq("event_id", input.event_id)
+                .eq("user_id", input.user_id)),
+        );
+        return json({ ok: true });
+      }
+      if (child) {
+        uuid.parse(child);
+        if (req.method !== "GET")
+          throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        const params = new URL(req.url).searchParams;
+        const page = z.coerce
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .parse(params.get("page") ?? 1);
+        const event = checked(
+          await client
+            .from("public_events")
+            .select("id")
+            .eq("id", child)
+            .maybeSingle(),
+        );
+        if (!event) throw new HttpError(404, "NOT_FOUND");
+        const counts = await Promise.all(
+          ["registered", "cancelled", "pending", "rejected"].map((status) =>
+            client
+              .from("event_registrations")
+              .select("id", { count: "exact", head: true })
+              .eq("event_id", child)
+              .eq("status", status),
+          ),
+        );
+        counts.forEach(checked);
+        const rows =
+          checked(
+            await client
+              .from("event_registrations")
+              .select(
+                "id,user_id,status,updated_at,checked_in_at,applicant_name,organization,contact_email,eligibility_status,review_reason",
+              )
+              .eq("event_id", child)
+              .order("updated_at", { ascending: false })
+              .order("id")
+              .range((page - 1) * 50, page * 50 - 1),
+          ) ?? [];
+        const profiles = rows.length
+          ? (checked(
+              await client
+                .from("profiles")
+                .select("id,display_name,email")
+                .in(
+                  "id",
+                  rows.map((r) => r.user_id).filter(Boolean),
+                ),
+            ) ?? [])
+          : [];
+        const byId = new Map(profiles.map((p) => [p.id, p]));
+        return json({
+          registrations: rows.map((r) => ({
+            ...r,
+            display_name: byId.get(r.user_id)?.display_name ?? null,
+            email: byId.get(r.user_id)?.email ?? null,
+          })),
+          registered: counts[0].count ?? 0,
+          cancelled: counts[1].count ?? 0,
+          pending: counts[2].count ?? 0,
+          rejected: counts[3].count ?? 0,
+          total: counts.reduce((n, c) => n + (c.count ?? 0), 0),
+          page,
+          page_size: 50,
+        });
+      }
       if (req.method === "GET")
         return json({
           events: checked(
@@ -121,6 +271,19 @@ export default async function handler(req: Request) {
         input.kind === "event"
           ? eventSchema.parse(input.record)
           : announcementSchema.parse(input.record);
+      await guard(
+        input.kind === "event"
+          ? {
+              title: record.title,
+              description: (record as any).description,
+              location: (record as any).location,
+              agenda: (record as any).agenda,
+            }
+          : { title: record.title, content: (record as any).content },
+        false,
+        actor,
+        "rest_api",
+      );
       await limited(actor.id, "public_event_manage", 30);
       const table =
         input.kind === "event" ? "public_events" : "public_announcements";
@@ -204,7 +367,125 @@ export default async function handler(req: Request) {
         ),
       });
     }
+    if (id === "staff" && !child) {
+      if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const actor = (await authenticate(req))!;
+      requireInteractive(actor);
+      let q = client
+        .from("public_events")
+        .select("id,title,starts_at,ends_at")
+        .eq("is_published", true)
+        .eq("status", "scheduled");
+      if (actor.role !== "admin") {
+        const rows =
+          checked(
+            await client
+              .from("event_staff")
+              .select("event_id")
+              .eq("user_id", actor.id),
+          ) ?? [];
+        if (!rows.length) return json({ events: [] });
+        q = q.in(
+          "id",
+          rows.map((r) => r.event_id),
+        );
+      }
+      return json({ events: checked(await q.order("starts_at").limit(500)) });
+    }
     uuid.parse(id);
+    if (child === "guest-registration" || child === "guest-ticket") {
+      // Netlify context.ip is platform supplied. Never trust X-Forwarded-For.
+      const ip = context?.ip ?? "local-unknown";
+      const guestQuota = async (scope: string, limit: number) => {
+        const allowed = checked(await client.rpc("consume_guest_quota", {
+          p_key: hashToken(scope), p_limit: limit,
+        }));
+        if (!allowed) throw new HttpError(429, "RATE_LIMITED");
+      };
+      let token: string;
+      let result;
+      if (child === "guest-registration" && req.method === "POST") {
+        await guestQuota(`guest-create:${ip}`, 120);
+        const input = z.object({
+          name: z.string().trim().min(1).max(100),
+          organization: z.string().trim().min(1).max(200),
+          contact_email: z.email().max(254),
+        }).strict().parse(await body(req));
+        const key = req.headers.get("Idempotency-Key");
+        if (key && !/^[a-f0-9]{64}$/.test(key)) throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY");
+        token = "ntucc_guest_" + (key ?? randomBytes(32).toString("hex"));
+        result = await client.rpc("register_guest_event", {
+          p_event: id, p_hash: hashToken(token), p_name: input.name,
+          p_organization: input.organization, p_email: input.contact_email,
+          p_ticket: "ntucc_ticket_" + randomBytes(32).toString("hex"),
+        });
+      } else {
+        if (!(req.method === "GET" || (child === "guest-registration" && req.method === "DELETE")))
+          throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        token = req.headers.get("authorization")?.match(/^Bearer (ntucc_guest_[a-f0-9]{64})$/i)?.[1] ?? "";
+        if (!token) throw new HttpError(401, "GUEST_TOKEN_REQUIRED");
+        result = await client.rpc("access_guest_event", {
+          p_event: id, p_hash: hashToken(token), p_cancel: false,
+        });
+        // Validate first: arbitrary guessed tokens must not create quota rows.
+        // Shared hospital NAT and exhausted creation quota cannot lock out tickets.
+        if (!result.error) {
+          const action = req.method === "DELETE" ? "cancel" : "read";
+          await guestQuota(`guest-${action}:${id}:${hashToken(token)}`, action === "cancel" ? 30 : 120);
+          if (action === "cancel") result = await client.rpc("access_guest_event", {
+            p_event: id, p_hash: hashToken(token), p_cancel: true,
+          });
+        }
+      }
+      if (result.error) {
+        const code = ["EVENT_NOT_FOUND", "EVENT_CANCELLED", "INVALID_APPLICATION", "IDEMPOTENCY_CONFLICT", "GUEST_ACCESS_EXPIRED", "ORGANIZATION_NOT_ELIGIBLE", "REGISTRATION_CLOSED", "EVENT_FULL", "INVALID_GUEST_TOKEN"].find(c => result.error.message.includes(c));
+        if (code) throw new HttpError(code === "INVALID_GUEST_TOKEN" ? 401 : code === "EVENT_NOT_FOUND" ? 404 : 409, code);
+      }
+      const data = checked(result);
+      if (data.ticket?.token) data.ticket = { ...data.ticket, ...ticketQr(data.ticket.token) };
+      if (child === "guest-ticket") {
+        if (!data.ticket) throw new HttpError(404, "TICKET_UNAVAILABLE");
+        return json(data.ticket);
+      }
+      return json({ ...data, ...(req.method === "POST" ? { management_token: token } : {}), calendar_url: `/api/v1/events/${id}/calendar` });
+    }
+    if (child === "ticket") {
+      if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const user = await eventActor(req);
+      await limited(user, "event_ticket", 60);
+      const result = await client.rpc("event_ticket", {
+        p_user: user,
+        p_event: id,
+        p_token: "ntucc_ticket_" + randomBytes(32).toString("hex"),
+      });
+      if (result.error?.message.includes("TICKET_UNAVAILABLE"))
+        throw new HttpError(404, "TICKET_UNAVAILABLE");
+      return json(checked(result));
+    }
+    if (child === "check-in") {
+      if (req.method !== "POST") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const actor = (await authenticate(req))!;
+      requireInteractive(actor);
+      const input = z
+        .object({ token: z.string().regex(/^ntucc_ticket_[a-f0-9]{64}$/) })
+        .strict()
+        .parse(await body(req));
+      await limited(actor.id, "event_checkin", 120);
+      const result = await client.rpc("check_in_public_event", {
+        p_actor: actor.id,
+        p_event: id,
+        p_token: input.token,
+      });
+      const code = [
+        "STAFF_REQUIRED",
+        "CHECKIN_UNAVAILABLE",
+        "CHECKIN_CLOSED",
+        "INVALID_TICKET",
+      ].find((c) => result.error?.message.includes(c));
+      if (code)
+        throw new HttpError(code === "STAFF_REQUIRED" ? 403 : 409, code);
+      return json(checked(result));
+    }
     if (child === "registration") {
       const user = await eventActor(req);
       if (req.method === "GET")
@@ -212,7 +493,9 @@ export default async function handler(req: Request) {
           checked(
             await client
               .from("event_registrations")
-              .select("id,status")
+              .select(
+                "id,status,applicant_name,organization,contact_email,eligibility_status,review_reason",
+              )
               .eq("event_id", id)
               .eq("user_id", user)
               .maybeSingle(),
@@ -220,14 +503,24 @@ export default async function handler(req: Request) {
         );
       if (!["POST", "DELETE"].includes(req.method))
         throw new HttpError(405, "METHOD_NOT_ALLOWED");
-      if (req.method === "POST")
-        z.object({})
-          .strict()
-          .parse(await body(req));
+      const input =
+        req.method === "POST"
+          ? z
+              .object({
+                name: z.string().trim().min(1).max(100),
+                organization: z.string().trim().min(1).max(200),
+                contact_email: z.email().max(254),
+              })
+              .strict()
+              .parse(await body(req))
+          : null;
       await limited(user, "event_registration", 30);
-      const r = await client.rpc("register_public_event", {
+      const r = await client.rpc("submit_event_application", {
         p_user: user,
         p_event: id,
+        p_name: input?.name ?? "",
+        p_organization: input?.organization ?? "",
+        p_email: input?.contact_email ?? "",
         p_cancel: req.method === "DELETE",
       });
       if (r.error) {
@@ -266,6 +559,7 @@ export default async function handler(req: Request) {
   } catch (e) {
     if (e instanceof z.ZodError)
       return json({ code: "VALIDATION_ERROR", issues: e.flatten() }, 400);
-    return fail(e);
+    // Upstream/network exceptions can include request headers; never log them.
+    return fail(e instanceof HttpError ? e : new Error("Events API request failed"));
   }
 }

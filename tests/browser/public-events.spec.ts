@@ -53,7 +53,9 @@ test("public homepage and event details work without membership and escape conte
   await expect(
     page.getByRole("heading", { name: event.title, exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("請使用上方 Google 登入報名。")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "免登入報名活動" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "下載 .ics" })).toHaveAttribute(
     "href",
     `/api/v1/events/${event.id}/calendar`,
@@ -111,4 +113,41 @@ test("newer event navigation wins over late response", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "加入行事曆", exact: true }),
   ).toHaveCount(0);
+});
+
+test("public agenda is escaped and local photo framing never uploads", async ({
+  page,
+}) => {
+  const writes: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() !== "GET") writes.push(request.url());
+  });
+  await page.route(`**/api/v1/events/${event.id}`, (r) =>
+    r.fulfill({
+      json: {
+        ...event,
+        agenda: [{ time: "18:00", title: "分享 <img src=x>", speaker: "講者" }],
+      },
+    }),
+  );
+  await page.goto(`/#event/${event.id}`);
+  await expect(page.locator(".public-agenda")).toContainText(
+    "分享 <img src=x>",
+  );
+  await page.getByRole("link", { name: "製作本機活動相框" }).click();
+  await page
+    .locator("input[type=file]")
+    .first()
+    .setInputFiles({
+      name: "pixel.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aNnsAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  await expect(
+    page.getByRole("link", { name: "下載 PNG", exact: true }),
+  ).toBeVisible();
+  expect(writes).toEqual([]);
 });

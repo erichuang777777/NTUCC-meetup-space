@@ -8,6 +8,7 @@ export type CalendarEvent = {
   updated_at: string;
   status: string;
   sequence?: number;
+  agenda?: Array<{ time: string; title: string; speaker?: string }>;
 };
 const escape = (s: string) =>
   s
@@ -50,7 +51,7 @@ export function eventCalendar(e: CalendarEvent) {
       `DTSTART:${stamp(e.starts_at)}`,
       `DTEND:${stamp(e.ends_at)}`,
       `SUMMARY:${escape(e.title)}`,
-      `DESCRIPTION:${escape(e.description)}`,
+      `DESCRIPTION:${escape(e.description + (e.agenda?.length ? "\n\n議程\n" + e.agenda.map((a) => `${a.time} ${a.title}${a.speaker ? " · " + a.speaker : ""}`).join("\n") : ""))}`,
       `LOCATION:${escape(e.location)}`,
       `STATUS:${e.status === "cancelled" ? "CANCELLED" : "CONFIRMED"}`,
       "END:VEVENT",
