@@ -34,6 +34,7 @@ test("public event API is allowlisted; verified external users can act only for 
     admin = false,
     tokenExists = true;
   const calls: { path: string; data: any; method: string }[] = [];
+  let bannedUntil: string | null = null;
   const server = createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -47,6 +48,7 @@ test("public event API is allowlisted; verified external users can act only for 
       res.end(JSON.stringify(v));
     };
     const user = {
+      banned_until: bannedUntil,
       id: U,
       email: "external@example.test",
       email_confirmed_at: confirmed ? "2026-01-01" : null,
@@ -154,6 +156,11 @@ test("public event API is allowlisted; verified external users can act only for 
       (await req("/tokens", "POST", "ntucc_event_secret", {})).status,
       403,
     );
+    assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,200);
+    bannedUntil = "2099-01-01";
+    assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,401);
+    assert.equal((await req('/'+E+'/registration','POST','jwt',{})).status,403);
+    bannedUntil = "2020-01-01";
     assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,200);
     tokenExists = false;
     assert.equal(
