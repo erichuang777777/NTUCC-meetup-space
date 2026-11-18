@@ -8,6 +8,7 @@ import {
   requireInteractive,
 } from "./shared/auth-helper.js";
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
+import { guard } from "./shared/pii-guard.js";
 import { eventCalendar } from "./shared/event-calendar.js";
 const eventFields =
   "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence";
@@ -41,6 +42,10 @@ const announcementSchema = z
     is_published: z.boolean(),
   })
   .strict();
+function eligible(user: any) {
+  return !!user?.email_confirmed_at && !user.is_anonymous && !user.deleted_at &&
+    !(user.banned_until && Date.parse(user.banned_until) > Date.now());
+}
 async function eventActor(req: Request, interactive = false) {
   const token = req.headers.get("authorization")?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token) throw new HttpError(401, "AUTH_REQUIRED");
@@ -57,7 +62,7 @@ async function eventActor(req: Request, interactive = false) {
     if (!row || Date.parse(row.expires_at) <= Date.now())
       throw new HttpError(401, "INVALID_TOKEN");
     const { data, error } = await client.auth.admin.getUserById(row.user_id);
-    if (error || !data.user?.email_confirmed_at || data.user.is_anonymous)
+    if (error || !eligible(data.user))
       throw new HttpError(401, "INVALID_TOKEN");
     return row.user_id as string;
   }
@@ -65,7 +70,7 @@ async function eventActor(req: Request, interactive = false) {
     throw new HttpError(403, "EVENT_TOKEN_REQUIRED");
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) throw new HttpError(401, "INVALID_TOKEN");
-  if (!data.user.email_confirmed_at || data.user.is_anonymous)
+  if (!eligible(data.user))
     throw new HttpError(403, "EMAIL_NOT_VERIFIED");
   return data.user.id;
 }
@@ -121,6 +126,7 @@ export default async function handler(req: Request) {
         input.kind === "event"
           ? eventSchema.parse(input.record)
           : announcementSchema.parse(input.record);
+      await guard(record, false, actor, "rest_api");
       await limited(actor.id, "public_event_manage", 30);
       const table =
         input.kind === "event" ? "public_events" : "public_announcements";
