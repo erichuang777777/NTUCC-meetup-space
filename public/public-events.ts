@@ -66,10 +66,12 @@ export function isPublicRoute() {
 export function mountPublicEvents(client: SupabaseClient | null) {
   const root = document.querySelector<HTMLElement>("#app")!;
   let generation = 0;
-  const api = async (path = "", method = "GET", payload?: unknown) => {
+  const request = async (expectedSubject: string | null, path = "", method = "GET", payload?: unknown) => {
     const session = client
       ? (await client.auth.getSession()).data.session
       : null;
+    if ((session?.user.id ?? null) !== expectedSubject)
+      throw Error("登入帳號已變更，請重新整理後確認帳號再操作。");
     const response = await fetch(`/api/v1/events${path}`, {
       method,
       headers: {
@@ -106,6 +108,8 @@ export function mountPublicEvents(client: SupabaseClient | null) {
       const session = client
         ? (await client.auth.getSession()).data.session
         : null;
+      const api = (path = "", method = "GET", payload?: unknown) =>
+        request(session?.user.id ?? null, path, method, payload);
       const restore = sessionStorage.getItem("ntucc-public-return");
       if (restore && /^#(?:events|event\/[0-9a-f-]{36})$/i.test(restore)) {
         sessionStorage.removeItem("ntucc-public-return");
@@ -308,6 +312,15 @@ export function mountPublicEvents(client: SupabaseClient | null) {
     else {
       generation++;
       location.reload();
+    }
+  });
+  // Invalidate sensitive views synchronously on cross-tab account changes.
+  // Defer getSession until outside Supabase's auth callback lock.
+  client?.auth.onAuthStateChange((event) => {
+    if (["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event) && isPublicRoute()) {
+      generation++;
+      root.textContent = "登入狀態已更新，正在重新載入…";
+      setTimeout(() => { if (isPublicRoute()) void render(); }, 0);
     }
   });
   void render();
