@@ -1,3 +1,5 @@
+> 新增公開活動入口（migration 006，待部署）：首頁提供明確發布的對外活動／公告與報名，既有院內資料完全不改公開範圍。詳見 [公開活動與 Agent 報名規格](PUBLIC_EVENTS.md)。下方 members-only 說明仍適用於原有會員區，不再代表整個首頁。
+
 > 更新：分享與問答已改為院內成員限定。訪客與尚未通關的帳號不可讀取任何活動／分享內容；下方早期「公開唯讀」說明由此更新取代。public visibility 現在代表「已驗證院內成員可見」。
 >
 > 已執行 001 的專案：請另行在 Supabase SQL Editor 執行 `supabase/migrations/002_members_only.sql`，無須重跑 001。新專案須依序執行 001、002。Netlify 也需部署本次 API 更新。
