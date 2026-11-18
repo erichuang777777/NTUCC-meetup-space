@@ -150,3 +150,31 @@
     padding: 35px 0 !important;
   }
 }
+.public-roster-id {
+  overflow-wrap: anywhere;
+}
+.public-roster-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.public-roster {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.public-roster th,
+.public-roster td {
+  padding: 12px;
+  border-bottom: 1px solid #dce5dd;
+  vertical-align: top;
+}
+.public-roster code {
+  overflow-wrap: anywhere;
+}
+.public-roster-pages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+  margin-top: 24px;
+}
