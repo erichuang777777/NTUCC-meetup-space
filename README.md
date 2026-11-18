@@ -12,7 +12,7 @@
 
 ## 本機啟動
 
-需要 Node.js 22+。
+需要 Node.js 24+（與 QR Code 套件及 CI 執行環境一致）。
 
 ```bash
 npm ci

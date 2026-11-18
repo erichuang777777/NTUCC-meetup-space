@@ -3,14 +3,16 @@ import { createServer } from "node:http";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import {
+// ZXing is CommonJS: use its default namespace, not Node-version-dependent named exports.
+import ZXing from "@zxing/library";
+const {
   QRCodeWriter,
   BarcodeFormat,
   RGBLuminanceSource,
   BinaryBitmap,
   HybridBinarizer,
   QRCodeReader,
-} from "@zxing/library";
+} = ZXing;
 import handler from "../netlify/functions/events-api.js";
 const U = "a0000000-0000-4000-8000-000000000001",
   S = "a0000000-0000-4000-8000-000000000002",
