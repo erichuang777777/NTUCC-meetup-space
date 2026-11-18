@@ -178,3 +178,42 @@
   align-items: center;
   margin-top: 24px;
 }
+.public-scanner {
+  display: block;
+  width: 100%;
+  max-width: 480px;
+  max-height: 360px;
+  margin: 20px 0;
+  background: #152f27;
+}
+.public-ticket-label {
+  display: grid;
+  gap: 8px;
+  margin: 20px 0;
+}
+.public-ticket-label input {
+  width: 100%;
+}
+.public-ticket-qr svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  background: white;
+}
+.public-roster td {
+  overflow-wrap: anywhere;
+}
+.public-staff-editor {
+  max-width: 640px;
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid #dce5dd;
+}
+.public-staff-editor label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.public-staff-editor input {
+  width: 100%;
+}
