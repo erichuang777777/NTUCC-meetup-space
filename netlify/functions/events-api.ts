@@ -8,6 +8,7 @@ import {
   requireInteractive,
 } from "./shared/auth-helper.js";
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
+import { guard } from "./shared/pii-guard.js";
 import { eventCalendar } from "./shared/event-calendar.js";
 const eventFields =
   "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence";
@@ -41,6 +42,10 @@ const announcementSchema = z
     is_published: z.boolean(),
   })
   .strict();
+function eligible(user: any) {
+  return !!user?.email_confirmed_at && !user.is_anonymous && !user.deleted_at &&
+    !(user.banned_until && Date.parse(user.banned_until) > Date.now());
+}
 async function eventActor(req: Request, interactive = false) {
   const token = req.headers.get("authorization")?.match(/^Bearer (\S+)$/i)?.[1];
   if (!token) throw new HttpError(401, "AUTH_REQUIRED");
@@ -57,7 +62,7 @@ async function eventActor(req: Request, interactive = false) {
     if (!row || Date.parse(row.expires_at) <= Date.now())
       throw new HttpError(401, "INVALID_TOKEN");
     const { data, error } = await client.auth.admin.getUserById(row.user_id);
-    if (error || !data.user?.email_confirmed_at || data.user.is_anonymous)
+    if (error || !eligible(data.user))
       throw new HttpError(401, "INVALID_TOKEN");
     return row.user_id as string;
   }
@@ -65,7 +70,7 @@ async function eventActor(req: Request, interactive = false) {
     throw new HttpError(403, "EVENT_TOKEN_REQUIRED");
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) throw new HttpError(401, "INVALID_TOKEN");
-  if (!data.user.email_confirmed_at || data.user.is_anonymous)
+  if (!eligible(data.user))
     throw new HttpError(403, "EMAIL_NOT_VERIFIED");
   return data.user.id;
 }
@@ -88,10 +93,33 @@ export default async function handler(req: Request) {
     const [id, child] = path;
     if (path.length > 2) throw new HttpError(404, "NOT_FOUND");
     const client = db();
-    if (id === "manage" && !child) {
+    if (id === "manage") {
       const actor = (await authenticate(req))!;
       requireInteractive(actor);
       admin(actor);
+      if (child) {
+        uuid.parse(child);
+        if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        const params = new URL(req.url).searchParams;
+        const page = z.coerce.number().int().min(1).max(200).parse(params.get("page") ?? 1);
+        const event = checked(await client.from("public_events").select("id").eq("id", child).maybeSingle());
+        if (!event) throw new HttpError(404, "NOT_FOUND");
+        const counts = await Promise.all(["registered", "cancelled"].map(status =>
+          client.from("event_registrations").select("id", {count: "exact", head: true}).eq("event_id", child).eq("status", status)));
+        counts.forEach(checked);
+        const rows = checked(await client.from("event_registrations")
+          .select("id,user_id,status,updated_at").eq("event_id", child)
+          .order("updated_at", {ascending: false}).order("id")
+          .range((page-1)*50, page*50-1)) ?? [];
+        const profiles = rows.length ? checked(await client.from("profiles")
+          .select("id,display_name,email").in("id", rows.map(r => r.user_id))) ?? [] : [];
+        const byId = new Map(profiles.map(p => [p.id, p]));
+        return json({registrations: rows.map(r => ({...r,
+          display_name: byId.get(r.user_id)?.display_name ?? null,
+          email: byId.get(r.user_id)?.email ?? null})),
+          registered: counts[0].count ?? 0, cancelled: counts[1].count ?? 0,
+          total: (counts[0].count ?? 0)+(counts[1].count ?? 0), page, page_size: 50});
+      }
       if (req.method === "GET")
         return json({
           events: checked(
@@ -121,6 +149,7 @@ export default async function handler(req: Request) {
         input.kind === "event"
           ? eventSchema.parse(input.record)
           : announcementSchema.parse(input.record);
+      await guard(record, false, actor, "rest_api");
       await limited(actor.id, "public_event_manage", 30);
       const table =
         input.kind === "event" ? "public_events" : "public_announcements";
