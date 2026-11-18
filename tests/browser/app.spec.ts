@@ -4,7 +4,7 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/");
+  await page.goto("/#members");
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await expect(
     page.getByRole("heading", { name: "公布欄", exact: true }),
@@ -34,7 +34,7 @@ test("desktop demo navigation, filtering, source gate and safe rendering", async
 });
 test("mobile layout fits viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
+  await page.goto("/#members");
   await expect(
     page.getByRole("button", { name: "使用 Google 帳號登入" }),
   ).toBeVisible();
@@ -67,7 +67,7 @@ test("sandbox strips presenter scripts, enforces CSP and supports isolated navig
       });
     else await route.fulfill({ response });
   });
-  await page.goto("/");
+  await page.goto("/#members");
   await page.evaluate(async () => {
     const { sandboxDocument } = await import(String("/player.ts"));
     const html =
@@ -132,7 +132,7 @@ test("login is the entry point even for deep links; returning to login hides nav
 test("image discovery opens an isolated project forum, topics and replies stay in that project", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#members");
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await expect(page.locator(".project-cover img")).toHaveCount(3);
@@ -181,7 +181,7 @@ test("image discovery opens an isolated project forum, topics and replies stay i
 test("PII confirmation runs before a forum topic is posted", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#members");
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await page.locator(".project-cover").first().click();
@@ -198,7 +198,7 @@ test("PII confirmation runs before a forum topic is posted", async ({
 test("project contact opens a private inbox preview, guards PII and supports blocking", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#members");
   await page.getByRole("button", { name: "預覽介面（示例資料） →" }).click();
   await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await page.locator(".project-cover").first().click();
@@ -244,7 +244,7 @@ test("project contact opens a private inbox preview, guards PII and supports blo
 test("member management supports role updates and invitation creation/revocation in a compact UI", async ({
   page,
 }) => {
-  await page.goto("/");
+  await page.goto("/#members");
   await page.evaluate(async () => {
     const { mountMemberAdmin } = await import(String("/member-admin.ts"));
     const own = "00000000-0000-4000-8000-000000000001",
