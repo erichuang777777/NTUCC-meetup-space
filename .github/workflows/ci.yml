@@ -27,7 +27,6 @@ jobs:
       - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
-      - run: npm audit --audit-level=high
       - name: Check schema and RLS in disposable PostgreSQL
         env:
           PGPASSWORD: test-only
@@ -38,7 +37,11 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/003_project_discussions.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/004_agent_contacts.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/005_member_management.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/006_public_events.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/rls.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/discussions.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/contacts.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/members.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/public-events.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/public-events-concurrency.sh
+      - run: npm audit --audit-level=high

@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import { mountPublicEvents, isPublicRoute } from "./public-events";
 import { mountMemberAdmin } from "./member-admin";
 import { mountMessages } from "./messages";
 import { mountForum, coverFor } from "./forum";
@@ -75,7 +76,7 @@ async function signIn() {
   const { error } = await client.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: location.origin,
+      redirectTo: location.origin + "/#members",
       ...(sessionStorage.getItem("ntucc-member-invite")
         ? { queryParams: { prompt: "select_account" } }
         : {}),
@@ -375,7 +376,11 @@ function render() {
       profile = null;
       demoEntered = false;
       page = "announcements";
-      history.replaceState(null, "", location.pathname + location.search);
+      history.replaceState(
+        null,
+        "",
+        location.pathname + location.search + "#members",
+      );
       render();
     });
   switch (page) {
@@ -1511,7 +1516,7 @@ async function init() {
   }
 }
 client?.auth.onAuthStateChange((event) => {
-  if (event === "SIGNED_OUT") {
+  if (event === "SIGNED_OUT" && !isPublicRoute()) {
     user = null;
     profile = null;
     spaces = [];
@@ -1527,6 +1532,7 @@ client?.auth.onAuthStateChange((event) => {
   }
 });
 window.addEventListener("popstate", () => {
+  if (isPublicRoute()) return;
   const link = location.hash.match(/^#project\/([^/]+)(?:\/thread\/([^/]+))?$/);
   if (link && (profile?.passcode_verified || demoEntered))
     void run(() =>
@@ -1543,7 +1549,13 @@ window.addEventListener("popstate", () => {
     render();
   }
 });
-void init();
+if (isPublicRoute()) mountPublicEvents(client);
+else {
+  window.addEventListener("hashchange", () => {
+    if (isPublicRoute()) location.reload();
+  });
+  void init();
+}
 
 async function speakerCheckin(s: any) {
   const own = await read(
