@@ -1,3 +1,28 @@
+## 訪客報名（migration 012 起，尚需部署驗收）
+
+活動報名與論壇會員完全分離。**不需 Google 登入或網站帳號**；人類網頁與 Coding Agent 均可直接呼叫訪客 API。下文舊版 `/registration`、`/ticket` 與 event token 是既有登入使用者的相容路徑，不是訪客報名的前置要求。**訪客照片上傳尚未支援**：照片上傳與論壇仍使用原本登入權限；訪客報名後再登入也不會自動綁定票券，需另有會員報名才符合現有照片 API。私人管理連結不授予照片上傳或論壇權限。
+
+```sh
+# Idempotency-Key 必須為密碼學安全亂數 32 bytes 的 64 位小寫 hex。
+# 此 key 等同私人管理憑證，不能公開、放進網址 query 或寫入任何 log。
+KEY=$(openssl rand -hex 32)
+curl -X POST "$BASE/api/v1/events/$EVENT_ID/guest-registration" \
+  -H 'Content-Type: application/json' -H "Idempotency-Key: $KEY" \
+  -d '{"name":"測試參與者","organization":"台大醫院","contact_email":"personal@example.test"}'
+```
+
+回傳 `registration_id`、`status`、`management_token`、`ticket.token`、`ticket.qr_svg`／`ticket.qr_data_url` 與 `calendar_url`。Agent 可直接把 `ticket.qr_svg` 存為 SVG 圖供使用者保存（或顯示 `ticket.qr_data_url`），並下載 `calendar_url` 的 `.ics` 邀請檔交付使用者；收到 JSON 不等於已把圖片或行事曆交給使用者。網頁會提供 QR SVG、私人管理連結與 ICS 下載。沒有寄信、自動加行事曆、信箱驗證或員工身分驗證。
+
+- 單位含「台大」或「臺大」即通過；不符回 `409 ORGANIZATION_NOT_ELIGIBLE`，不佔名額。
+- `GET /api/v1/events/{id}/guest-registration` 查看自己的資料；`DELETE` 取消。
+- `GET /api/v1/events/{id}/guest-ticket` 取得票券；以上三者只接受 `Authorization: Bearer ntucc_guest_…`，限該次報名／活動，不開通任何論壇功能。
+- 私人管理憑證到活動結束後 30 天失效。QR 只供已授權工作人員報到，不能用來查詢聯絡資料或取消報名。取消立即使 QR 失效。
+- 使用同一安全亂數 key 與完全相同資料重試會回傳同一報名；不同資料回 `409 IDEMPOTENCY_CONFLICT`。取消後重試原 key 不會自動重新報名。省略 key 時伺服器產生新憑證，但若網路中斷將無法安全找回該次報名。
+- email 只是自行填寫的聯絡資料，**不能當作取回票券、登入或辨識同一人的證據**。不同憑證使用相同 email 不會接管他人報名，也不自動合併。若遺失私人憑證，請聯絡主辦方人工處理；不要直接重複報名。這種輕量流程無法保證一人一票或防止虛填，並非嚴格身分審查。
+- 建立報名以 Netlify 提供的可信來源 IP 雜湊計數，每小時最多 120 次建立請求；不信任用戶提供的 forwarded headers。共用院內出口只共用建立額度，正式活動需負載測試與調整。既有有效憑證不受 IP 額度影響：每個活動／憑證另有每小時 120 次讀取與獨立 30 次取消額度，因此建立或讀取額度耗盡仍可取消；無效憑證不建立 quota 資料。DB limiter 資料約兩小時後於後續請求清理。
+- 日誌規則：Idempotency-Key、Authorization、管理 token、QR token 與報名回應皆視為秘密，不得記錄。應用程式未知錯誤只記固定訊息，不記原始 exception／headers／body；部署者也必須停用反向代理、APM、平台的 header/body capture，或完整遮蔽這些欄位。應用程式無法代替尚未部署的平台設定驗證。有效憑證驗證本身仍耗用資料庫查詢，部署時需配置邊緣層防濫用，不能以此應用限流宣稱具備 DDoS 防護。
+- 使用獨立測試資料庫套用 `012_guest_registration.sql`。這次不會替訪客建立 auth.users / profiles，也不會修改既有會員報名。
+
 # Public events, registration, check-in and photos (006–011)
 
 This adds a separate, explicitly curated public website. **No existing announcement, session, project, profile, attachment, private message or attendee list becomes public.** `/` and `#events` show published public events/announcements; `#members` retains the existing internal login/passcode gate. Administrators author public-only copies using the public-event management screen; drafts default to unpublished. Review text for sensitive content before publishing. No attachment publication is implemented.

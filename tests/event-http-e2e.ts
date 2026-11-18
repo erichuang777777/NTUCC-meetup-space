@@ -71,6 +71,9 @@ const backend = createServer(async (req, res) => {
       const fn = url.pathname.split("/").pop()!;
       const allowed = [
         "submit_event_application",
+        "register_guest_event",
+        "access_guest_event",
+        "consume_guest_quota",
         "event_ticket",
         "check_in_public_event",
       ];
@@ -128,14 +131,18 @@ const call = async (
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 try {
-  const registration = await call("/registration", "POST", {
+ for (const mode of ["member", "guest"] as const) {
+  const payload = {name:"測試參與者", organization:"台大醫院測試單位", contact_email:"personal@example.test"};
+  const registration = mode === "member" ? await call("/registration", "POST", payload) : await fetch(base + "/guest-registration", {method:"POST",headers:{"Content-Type":"application/json","Idempotency-Key":"a".repeat(64)},body:JSON.stringify({
     name: "測試參與者",
     organization: "台大醫院測試單位",
     contact_email: "personal@example.test",
-  });
+  })});
   assert.equal(registration.status, 200);
-  assert.equal((await registration.json()).status, "registered");
-  const ticketResponse = await call("/ticket");
+  const receipt = await registration.json();
+  assert.equal(receipt.status, "registered");
+  const credential = mode === "guest" ? receipt.management_token : "ntucc_event_test_authorized";
+  const ticketResponse = await call(mode === "guest" ? "/guest-ticket" : "/ticket", "GET", undefined, credential);
   assert.equal(ticketResponse.status, 200);
   const ticket = await ticketResponse.json();
   assert.match(ticket.token, /^ntucc_ticket_[a-f0-9]{64}$/);
@@ -176,10 +183,10 @@ try {
   );
   mkdirSync("artifacts", { recursive: true });
   writeFileSync(
-    "artifacts/isolated-ticket.svg",
+    `artifacts/isolated-${mode}-ticket.svg`,
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}"><rect width="100%" height="100%" fill="white"/><path d="${paths}" fill="black"/></svg>`,
   );
-  writeFileSync("artifacts/isolated-event.ics", ics);
+  writeFileSync(`artifacts/isolated-${mode}-event.ics`, ics);
   const scan = await call("/check-in", "POST", { token: decoded }, "staff-jwt");
   assert.equal(scan.status, 200);
   assert.equal((await scan.json()).already_checked_in, false);
@@ -190,7 +197,7 @@ try {
     "staff-jwt",
   );
   assert.equal((await again.json()).already_checked_in, true);
-  assert.equal((await call("/registration", "DELETE")).status, 200);
+  assert.equal((await call(mode === "guest" ? "/guest-registration" : "/registration", "DELETE", undefined, credential)).status, 200);
   const stale = await call(
     "/check-in",
     "POST",
@@ -199,8 +206,9 @@ try {
   );
   assert.equal(stale.status, 409);
   console.log(
-    "PASS: actual HTTP registration → real SQL → ticket → QR encode/decode → ICS download → staff check-in → duplicate → cancellation invalidates QR. Authentication is mocked; artifacts are isolated, not production tickets.",
+    `PASS ${mode}: actual HTTP registration → real SQL → ticket → QR encode/decode → ICS download → staff check-in → duplicate → cancellation invalidates QR. Authentication is mocked; artifacts are isolated, not production tickets.`,
   );
+ }
 } finally {
   api.close();
   backend.close();

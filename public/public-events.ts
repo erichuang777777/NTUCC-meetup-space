@@ -1,3 +1,9 @@
+import {
+  captureGuestLink,
+  hasGuestTicket,
+  mountGuestRegistration,
+  guestAgentInstructions,
+} from "./guest-registration";
 import { registrationName } from "./event-registration-display";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import "./public-events.css";
@@ -74,7 +80,7 @@ export function isPublicRoute() {
   return (
     !sessionStorage.getItem("ntucc-member-invite") &&
     (!location.hash ||
-      /^#(?:events|event\/|event-admin|event-tokens|event-checkin|event-staff|event-photo|my-photos|access_token=)/.test(
+      /^#(?:events|guest-ticket|event\/|event-admin|event-tokens|event-checkin|event-staff|event-photo|my-photos|access_token=)/.test(
         location.hash,
       ))
   );
@@ -139,6 +145,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
     return data;
   };
   async function render() {
+    captureGuestLink();
     releaseCamera();
     releasePhoto();
     const current = ++generation;
@@ -172,7 +179,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         admin = data?.role === "admin" && data?.passcode_verified === true;
       }
       if (!active()) return;
-      root.innerHTML = `<main class="public-home"><header class="public-header"><a href="#events" class="public-brand">NTUCC <span>MEETUP SPACES</span></a><nav aria-label="網站導覽"><a href="#events">公開活動</a><a href="#members">會員專區</a>${session ? '<a href="#my-photos">我的照片</a><a href="#event-tokens">Agent 報名</a><a href="#event-staff">工作人員報到</a>' : ""}${admin ? '<a href="#event-admin">公開內容管理</a>' : ""}</nav><button id="public-auth" class="secondary">${session ? "登出" : "Google 登入報名"}</button></header><p class="public-account">${session ? `目前帳號：${esc(session.user.email)}。活動報名不會開通院內會員權限。` : "不需註冊即可瀏覽公開資訊；報名時使用 Google 帳號驗證身分。"}</p><p id="public-feedback" role="status" aria-live="polite"></p><div id="public-content"></div></main>`;
+      root.innerHTML = `<main class="public-home"><header class="public-header"><a href="#events" class="public-brand">NTUCC <span>MEETUP SPACES</span></a><nav aria-label="網站導覽"><a href="#events">公開活動</a><a href="#members">會員專區</a><a href="#event-tokens">Agent 報名</a>${session ? '<a href="#my-photos">我的照片</a><a href="#event-staff">工作人員報到</a>' : ""}${admin ? '<a href="#event-admin">公開內容管理</a>' : ""}</nav><button id="public-auth" class="secondary">${session ? "登出" : "會員／工作人員登入"}</button></header><p class="public-account">${session ? `目前帳號：${esc(session.user.email)}。活動報名不會開通院內會員權限。` : "瀏覽與活動報名均不需登入或註冊；會員專區與照片上傳另需登入。"}</p><p id="public-feedback" role="status" aria-live="polite"></p><div id="public-content"></div></main>`;
       const content = root.querySelector<HTMLElement>("#public-content")!;
       const feedback = (s: string) => {
         if (active()) root.querySelector("#public-feedback")!.textContent = s;
@@ -212,6 +219,18 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         },
       );
       const path = location.hash;
+      const guestRoute = path.match(/^#guest-ticket\/([0-9a-f-]{36})$/i);
+      if (guestRoute) {
+        content.innerHTML =
+          '<h1>訪客活動票券</h1><a href="#events">返回公開活動</a><section id="guest-private"></section>';
+        await mountGuestRegistration(
+          content.querySelector("#guest-private")!,
+          guestRoute[1],
+          true,
+          active,
+        );
+        return;
+      }
       const checkinRoute = path.match(/^#event-checkin\/([0-9a-f-]{36})$/i);
       if (path === "#event-staff" || checkinRoute) {
         if (!session) {
@@ -309,13 +328,12 @@ export function mountPublicEvents(client: SupabaseClient | null) {
       }
       if (path === "#event-tokens") {
         if (!session) {
-          content.innerHTML =
-            "<h1>Agent 報名</h1><p>請先登入，取得只限自己活動報名的 Token。</p>";
+          content.innerHTML = guestAgentInstructions;
           return;
         }
         const { tokens } = await api("/tokens");
         if (!active()) return;
-        content.innerHTML = `<h1>授權 Agent 代我報名</h1><p>Token 僅用於自己的公開活動報名與取消，不含會員內容或私訊權限。請只交給你信任且已授權的 Agent。</p><button id="event-token-create">產生報名 Token</button><div id="event-token-once"></div><ul>${tokens.map((t: any) => `<li><code>${esc(t.prefix)}…</code> 有效至 ${esc(date(t.expires_at))} <button data-token-revoke="${esc(t.id)}" class="secondary">撤銷</button></li>`).join("")}</ul><p>API：GET /api/v1/events；POST /api/v1/events/{活動 ID}/registration，取消使用 DELETE。報名時 JSON 必填 name、organization、contact_email。服務單位包含「台大」即通過輕量關鍵字判定，非身分證明；聯絡信箱可與登入信箱不同。操作自己的報名時加上 Authorization: Bearer TOKEN。請勿把 Token 放在網址或公開貼文。</p>`;
+        content.innerHTML = `${guestAgentInstructions}<hr><h2>已登入帳號的舊版 Agent 授權</h2><p>Token 僅用於自己的公開活動報名與取消，不含會員內容或私訊權限。請只交給你信任且已授權的 Agent。</p><button id="event-token-create">產生報名 Token</button><div id="event-token-once"></div><ul>${tokens.map((t: any) => `<li><code>${esc(t.prefix)}…</code> 有效至 ${esc(date(t.expires_at))} <button data-token-revoke="${esc(t.id)}" class="secondary">撤銷</button></li>`).join("")}</ul><p>API：GET /api/v1/events；POST /api/v1/events/{活動 ID}/registration，取消使用 DELETE。報名時 JSON 必填 name、organization、contact_email。服務單位包含「台大」即通過輕量關鍵字判定，非身分證明；聯絡信箱可與登入信箱不同。操作自己的報名時加上 Authorization: Bearer TOKEN。請勿把 Token 放在網址或公開貼文。</p>`;
         action(
           content.querySelector<HTMLButtonElement>("#event-token-create")!,
           async () => {
@@ -570,13 +588,20 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         const closed =
           e.status === "cancelled" ||
           Date.now() >= Date.parse(e.registration_closes_at);
-        content.innerHTML = `<a href="#events">← 返回活動</a><article class="public-event-detail"><h1>${esc(e.title)}</h1><p>${esc(date(e.starts_at))} 至 ${esc(date(e.ends_at))}（台北）</p><p>${esc(e.location)}</p><p class="public-prose">${esc(e.description)}</p>${e.agenda?.length ? `<section class="public-agenda"><h2>活動議程</h2><ol>${e.agenda.map((item) => `<li><strong>${esc(item.time)}</strong><span>${esc(item.title)}${item.speaker ? `<small>講者：${esc(item.speaker)}</small>` : ""}</span></li>`).join("")}</ol></section>` : ""}<p><a href="#event-photo/${esc(e.id)}">製作本機活動相框</a></p><p>名額 ${esc(e.capacity)} 人 · 報名截止 ${esc(date(e.registration_closes_at))}</p>${e.status === "cancelled" ? '<p class="error">活動已取消</p>' : ""}<section id="event-registration" aria-live="polite">${session ? "正在讀取報名狀態…" : "請使用上方 Google 登入報名。"}</section><section><h2>加入行事曆</h2><p>加入行事曆不代表報名完成，也不會自動同步改期或取消。請以本站活動狀態為準。</p><div class="actions"><a href="/api/v1/events/${esc(e.id)}/calendar">下載 .ics</a><a href="${esc(calendarLinks(e).google)}" target="_blank" rel="noopener noreferrer">Google 行事曆</a><a href="${esc(calendarLinks(e).outlook)}" target="_blank" rel="noopener noreferrer">Outlook</a></div></section><section id="event-public-gallery"></section></article>`;
+        content.innerHTML = `<a href="#events">← 返回活動</a><article class="public-event-detail"><h1>${esc(e.title)}</h1><p>${esc(date(e.starts_at))} 至 ${esc(date(e.ends_at))}（台北）</p><p>${esc(e.location)}</p><p class="public-prose">${esc(e.description)}</p>${e.agenda?.length ? `<section class="public-agenda"><h2>活動議程</h2><ol>${e.agenda.map((item) => `<li><strong>${esc(item.time)}</strong><span>${esc(item.title)}${item.speaker ? `<small>講者：${esc(item.speaker)}</small>` : ""}</span></li>`).join("")}</ol></section>` : ""}<p><a href="#event-photo/${esc(e.id)}">製作本機活動相框</a></p><p>名額 ${esc(e.capacity)} 人 · 報名截止 ${esc(date(e.registration_closes_at))}</p>${e.status === "cancelled" ? '<p class="error">活動已取消</p>' : ""}<section id="event-registration" aria-live="polite">正在讀取報名狀態…</section><section><h2>加入行事曆</h2><p>加入行事曆不代表報名完成，也不會自動同步改期或取消。請以本站活動狀態為準。</p><div class="actions"><a href="/api/v1/events/${esc(e.id)}/calendar">下載 .ics</a><a href="${esc(calendarLinks(e).google)}" target="_blank" rel="noopener noreferrer">Google 行事曆</a><a href="${esc(calendarLinks(e).outlook)}" target="_blank" rel="noopener noreferrer">Outlook</a></div></section><section id="event-public-gallery"></section></article>`;
         disposePhoto = mountPublicPhotoGallery(
           content.querySelector<HTMLElement>("#event-public-gallery")!,
           e.id,
           active,
         );
-        if (session) {
+        if (!session || hasGuestTicket(e.id)) {
+          await mountGuestRegistration(
+            content.querySelector("#event-registration")!,
+            e.id,
+            closed,
+            active,
+          );
+        } else {
           const registration = await api(`/${e.id}/registration`);
           if (!active()) return;
           const reserved = registration?.status === "registered";

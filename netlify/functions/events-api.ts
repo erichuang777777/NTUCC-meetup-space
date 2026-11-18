@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ticketQr } from "./shared/ticket-qr.js";
 import { randomBytes } from "node:crypto";
 import {
   db,
@@ -109,7 +110,7 @@ async function limited(id: string, action: string, max: number) {
   );
   if (!ok) throw new HttpError(429, "RATE_LIMITED");
 }
-export default async function handler(req: Request) {
+export default async function handler(req: Request, context?: { ip?: string }) {
   try {
     const path = new URL(req.url).pathname
       .replace(/^.*\/(?:events-api|events)\/?/, "")
@@ -221,7 +222,7 @@ export default async function handler(req: Request) {
                 .select("id,display_name,email")
                 .in(
                   "id",
-                  rows.map((r) => r.user_id),
+                  rows.map((r) => r.user_id).filter(Boolean),
                 ),
             ) ?? [])
           : [];
@@ -392,6 +393,62 @@ export default async function handler(req: Request) {
       return json({ events: checked(await q.order("starts_at").limit(500)) });
     }
     uuid.parse(id);
+    if (child === "guest-registration" || child === "guest-ticket") {
+      // Netlify context.ip is platform supplied. Never trust X-Forwarded-For.
+      const ip = context?.ip ?? "local-unknown";
+      const guestQuota = async (scope: string, limit: number) => {
+        const allowed = checked(await client.rpc("consume_guest_quota", {
+          p_key: hashToken(scope), p_limit: limit,
+        }));
+        if (!allowed) throw new HttpError(429, "RATE_LIMITED");
+      };
+      let token: string;
+      let result;
+      if (child === "guest-registration" && req.method === "POST") {
+        await guestQuota(`guest-create:${ip}`, 120);
+        const input = z.object({
+          name: z.string().trim().min(1).max(100),
+          organization: z.string().trim().min(1).max(200),
+          contact_email: z.email().max(254),
+        }).strict().parse(await body(req));
+        const key = req.headers.get("Idempotency-Key");
+        if (key && !/^[a-f0-9]{64}$/.test(key)) throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY");
+        token = "ntucc_guest_" + (key ?? randomBytes(32).toString("hex"));
+        result = await client.rpc("register_guest_event", {
+          p_event: id, p_hash: hashToken(token), p_name: input.name,
+          p_organization: input.organization, p_email: input.contact_email,
+          p_ticket: "ntucc_ticket_" + randomBytes(32).toString("hex"),
+        });
+      } else {
+        if (!(req.method === "GET" || (child === "guest-registration" && req.method === "DELETE")))
+          throw new HttpError(405, "METHOD_NOT_ALLOWED");
+        token = req.headers.get("authorization")?.match(/^Bearer (ntucc_guest_[a-f0-9]{64})$/i)?.[1] ?? "";
+        if (!token) throw new HttpError(401, "GUEST_TOKEN_REQUIRED");
+        result = await client.rpc("access_guest_event", {
+          p_event: id, p_hash: hashToken(token), p_cancel: false,
+        });
+        // Validate first: arbitrary guessed tokens must not create quota rows.
+        // Shared hospital NAT and exhausted creation quota cannot lock out tickets.
+        if (!result.error) {
+          const action = req.method === "DELETE" ? "cancel" : "read";
+          await guestQuota(`guest-${action}:${id}:${hashToken(token)}`, action === "cancel" ? 30 : 120);
+          if (action === "cancel") result = await client.rpc("access_guest_event", {
+            p_event: id, p_hash: hashToken(token), p_cancel: true,
+          });
+        }
+      }
+      if (result.error) {
+        const code = ["EVENT_NOT_FOUND", "EVENT_CANCELLED", "INVALID_APPLICATION", "IDEMPOTENCY_CONFLICT", "GUEST_ACCESS_EXPIRED", "ORGANIZATION_NOT_ELIGIBLE", "REGISTRATION_CLOSED", "EVENT_FULL", "INVALID_GUEST_TOKEN"].find(c => result.error.message.includes(c));
+        if (code) throw new HttpError(code === "INVALID_GUEST_TOKEN" ? 401 : code === "EVENT_NOT_FOUND" ? 404 : 409, code);
+      }
+      const data = checked(result);
+      if (data.ticket?.token) data.ticket = { ...data.ticket, ...ticketQr(data.ticket.token) };
+      if (child === "guest-ticket") {
+        if (!data.ticket) throw new HttpError(404, "TICKET_UNAVAILABLE");
+        return json(data.ticket);
+      }
+      return json({ ...data, ...(req.method === "POST" ? { management_token: token } : {}), calendar_url: `/api/v1/events/${id}/calendar` });
+    }
     if (child === "ticket") {
       if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
       const user = await eventActor(req);
@@ -502,6 +559,7 @@ export default async function handler(req: Request) {
   } catch (e) {
     if (e instanceof z.ZodError)
       return json({ code: "VALIDATION_ERROR", issues: e.flatten() }, 400);
-    return fail(e);
+    // Upstream/network exceptions can include request headers; never log them.
+    return fail(e instanceof HttpError ? e : new Error("Events API request failed"));
   }
 }

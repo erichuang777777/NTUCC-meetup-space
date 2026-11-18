@@ -53,7 +53,9 @@ test("public homepage and event details work without membership and escape conte
   await expect(
     page.getByRole("heading", { name: event.title, exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("請使用上方 Google 登入報名。")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "免登入報名活動" }),
+  ).toBeVisible();
   await expect(page.getByRole("link", { name: "下載 .ics" })).toHaveAttribute(
     "href",
     `/api/v1/events/${event.id}/calendar`,
