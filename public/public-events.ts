@@ -11,6 +11,8 @@ type Event = {
   capacity: number;
   status: string;
   is_published?: boolean;
+  checkin_opens_at?: string | null;
+  checkin_closes_at?: string | null;
 };
 const esc = (v: unknown) =>
   String(v ?? "").replace(
@@ -58,7 +60,7 @@ export function isPublicRoute() {
   return (
     !sessionStorage.getItem("ntucc-member-invite") &&
     (!location.hash ||
-      /^#(?:events|event\/|event-admin|event-tokens|access_token=)/.test(
+      /^#(?:events|event\/|event-admin|event-tokens|event-checkin|event-staff|access_token=)/.test(
         location.hash,
       ))
   );
@@ -66,6 +68,13 @@ export function isPublicRoute() {
 export function mountPublicEvents(client: SupabaseClient | null) {
   const root = document.querySelector<HTMLElement>("#app")!;
   let generation = 0;
+  let stopCamera: (() => void) | null = null;
+  const releaseCamera = () => {
+    stopCamera?.();
+    stopCamera = null;
+  };
+  window.addEventListener("pagehide", releaseCamera);
+
   const request = async (
     expectedSubject: string | null,
     path = "",
@@ -93,6 +102,11 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         (
           {
             AUTH_REQUIRED: "請先登入後再操作。",
+            STAFF_REQUIRED: "需要本活動授權工作人員或管理員權限。",
+            CHECKIN_UNAVAILABLE: "此活動目前無法辦理報到。",
+            CHECKIN_CLOSED: "目前不在本活動的報到時段內。",
+            INVALID_TICKET: "票券無效、已取消，或不屬於本活動。",
+            TICKET_UNAVAILABLE: "目前無法取得票券，請確認仍已報名且活動開放。",
             EMAIL_NOT_VERIFIED: "請先驗證電子郵件。",
             EVENT_FULL: "本活動已額滿。",
             REGISTRATION_CLOSED: "本活動報名已截止。",
@@ -105,6 +119,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
     return data;
   };
   async function render() {
+    releaseCamera();
     const current = ++generation;
     const active = () => current === generation && isPublicRoute();
     root.innerHTML =
@@ -131,7 +146,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         admin = data?.role === "admin" && data?.passcode_verified === true;
       }
       if (!active()) return;
-      root.innerHTML = `<main class="public-home"><header class="public-header"><a href="#events" class="public-brand">NTUCC <span>MEETUP SPACES</span></a><nav aria-label="網站導覽"><a href="#events">公開活動</a><a href="#members">會員專區</a>${session ? '<a href="#event-tokens">Agent 報名</a>' : ""}${admin ? '<a href="#event-admin">公開內容管理</a>' : ""}</nav><button id="public-auth" class="secondary">${session ? "登出" : "Google 登入報名"}</button></header><p class="public-account">${session ? `目前帳號：${esc(session.user.email)}。活動報名不會開通院內會員權限。` : "不需註冊即可瀏覽公開資訊；報名時使用 Google 帳號驗證身分。"}</p><p id="public-feedback" role="status" aria-live="polite"></p><div id="public-content"></div></main>`;
+      root.innerHTML = `<main class="public-home"><header class="public-header"><a href="#events" class="public-brand">NTUCC <span>MEETUP SPACES</span></a><nav aria-label="網站導覽"><a href="#events">公開活動</a><a href="#members">會員專區</a>${session ? '<a href="#event-tokens">Agent 報名</a><a href="#event-staff">工作人員報到</a>' : ""}${admin ? '<a href="#event-admin">公開內容管理</a>' : ""}</nav><button id="public-auth" class="secondary">${session ? "登出" : "Google 登入報名"}</button></header><p class="public-account">${session ? `目前帳號：${esc(session.user.email)}。活動報名不會開通院內會員權限。` : "不需註冊即可瀏覽公開資訊；報名時使用 Google 帳號驗證身分。"}</p><p id="public-feedback" role="status" aria-live="polite"></p><div id="public-content"></div></main>`;
       const content = root.querySelector<HTMLElement>("#public-content")!;
       const feedback = (s: string) => {
         if (active()) root.querySelector("#public-feedback")!.textContent = s;
@@ -171,6 +186,101 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         },
       );
       const path = location.hash;
+      const checkinRoute = path.match(/^#event-checkin\/([0-9a-f-]{36})$/i);
+      if (path === "#event-staff" || checkinRoute) {
+        if (!session) {
+          content.innerHTML =
+            "<h1>工作人員報到</h1><p>請先登入已授權的院內工作人員帳號。</p>";
+          return;
+        }
+        const staffResult = await api("/staff");
+        if (!active()) return;
+        const events: Event[] = Array.isArray(staffResult)
+          ? staffResult
+          : staffResult.events;
+        if (!checkinRoute) {
+          content.innerHTML = `<h1>工作人員報到</h1><p>僅列出你獲授權的活動。掃描票券只用於現場報到，不會開啟票券中的網址。</p>${events.map((e) => `<article class="public-event-card"><h2>${esc(e.title)}</h2><p>${esc(date(e.starts_at))}</p><a href="#event-checkin/${esc(e.id)}">開啟報到工具</a></article>`).join("") || "<p>目前沒有獲授權的活動。</p>"}`;
+          return;
+        }
+        const eventId = checkinRoute[1];
+        const event = events.find((e) => e.id === eventId);
+        if (!event) {
+          content.innerHTML =
+            '<h1>無法開啟報到工具</h1><p>未找到此活動或你未獲授權。</p><a href="#event-staff">返回工作人員活動</a>';
+          return;
+        }
+        content.innerHTML = `<a href="#event-staff">← 返回工作人員活動</a><h1>${esc(event.title)} · 現場報到</h1><p>請確認出席者持有本活動票券。掃描後請再按「確認報到」，不會自動開啟任何網址。</p><button id="checkin-camera">啟用相機掃描 QR</button> <button id="checkin-stop" class="secondary">停止相機</button><video id="checkin-video" class="public-scanner" muted playsinline></video><label class="public-ticket-label">票券代碼（也可手動貼上）<input id="checkin-token" type="text" autocomplete="off" spellcheck="false" maxlength="77"></label><button id="checkin-submit">確認報到</button><p id="checkin-result" role="status" aria-live="polite"></p>`;
+        const tokenInput =
+          content.querySelector<HTMLInputElement>("#checkin-token")!;
+        const video =
+          content.querySelector<HTMLVideoElement>("#checkin-video")!;
+        const message = content.querySelector<HTMLElement>("#checkin-result")!;
+        const validTicket = (value: string) =>
+          /^ntucc_ticket_[a-f0-9]{64}$/.test(value);
+        let cameraAttempt = 0;
+        const stop = () => {
+          cameraAttempt++;
+          releaseCamera();
+        };
+        action(
+          content.querySelector<HTMLButtonElement>("#checkin-stop")!,
+          async () => {
+            stop();
+            message.textContent = "相機已停止。";
+          },
+        );
+        action(
+          content.querySelector<HTMLButtonElement>("#checkin-camera")!,
+          async () => {
+            stop();
+            const attempt = ++cameraAttempt;
+            const { BrowserQRCodeReader } = await import("@zxing/browser");
+            if (!active() || attempt !== cameraAttempt) return;
+            const controls =
+              await new BrowserQRCodeReader().decodeFromConstraints(
+                {
+                  audio: false,
+                  video: { facingMode: { ideal: "environment" } },
+                },
+                video,
+                (result, _error, controls) => {
+                  if (!active() || attempt !== cameraAttempt) {
+                    controls.stop();
+                    return;
+                  }
+                  if (!result) return;
+                  const value = result.getText().trim();
+                  if (!validTicket(value)) {
+                    message.textContent = "這不是本站票券，請掃描個人報名 QR。";
+                    return;
+                  }
+                  tokenInput.value = value;
+                  message.textContent =
+                    "已讀取票券，請確認活動與出席者後按「確認報到」。";
+                  controls.stop();
+                },
+              );
+            if (!active() || attempt !== cameraAttempt) controls.stop();
+            else stopCamera = () => controls.stop();
+          },
+        );
+        action(
+          content.querySelector<HTMLButtonElement>("#checkin-submit")!,
+          async () => {
+            const token = tokenInput.value.trim();
+            if (!validTicket(token))
+              throw Error(
+                "請提供有效的本站票券代碼，不接受網址或其他 QR 內容。",
+              );
+            stop();
+            const result = await api(`/${eventId}/check-in`, "POST", { token });
+            if (!active()) return;
+            message.textContent = `${result.already_checked_in ? "此票券已報到" : "報到成功"}：${result.display_name || result.registration_id}，${date(result.checked_in_at)}（台北）。`;
+            tokenInput.value = "";
+          },
+        );
+        return;
+      }
       if (path === "#event-tokens") {
         if (!session) {
           content.innerHTML =
@@ -252,10 +362,48 @@ export function mountPublicEvents(client: SupabaseClient | null) {
                 .slice(0, 16)
             : "";
         const eventForm = (e?: Event) =>
-          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
+          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("報到開始（台北，可留空）", "checkin_opens_at", "datetime-local", local(e?.checkin_opens_at ?? "")).replace(" required", "")}${field("報到結束（台北，可留空）", "checkin_closes_at", "datetime-local", local(e?.checkin_closes_at ?? "")).replace(" required", "")}<p>報到時段請同時填入開始與結束；都留空時使用活動開始至結束時間。若 18:00 開始分享、17:30 先入場，請將報到開始另設為 17:30。</p>${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
         const announcementForm = (a?: any) =>
           `<form class="public-editor" data-kind="announcement">${a ? `<input type="hidden" name="id" value="${esc(a.id)}">` : ""}<h2>${a ? "編輯公告" : "新增公開公告草稿"}</h2>${field("標題", "title", "text", a?.title)}<label>內容<textarea name="content" required>${esc(a?.content)}</textarea></label><label class="check"><input name="is_published" type="checkbox" ${a?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存公告</button></form>`;
-        content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}<a href="#event-admin/${esc(e.id)}">查看報名名單與統計</a></details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}</details>`).join("")}`;
+        content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}<div class="public-staff-editor" data-event-id="${esc(e.id)}"><label>工作人員帳號 UUID（需已通過院內驗證）<input class="staff-user-id" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label><button type="button" data-staff-method="POST">授權報到</button> <button type="button" data-staff-method="DELETE" class="secondary">撤銷報到權限</button></div><a href="#event-admin/${esc(e.id)}">查看報名名單與統計</a> · <a href="#event-checkin/${esc(e.id)}">現場報到</a>${e.is_published ? `<button type="button" data-unpublish="event" data-record-id="${esc(e.id)}" class="secondary">立即撤下公開活動</button>` : ""}</details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}${a.is_published ? `<button type="button" data-unpublish="announcement" data-record-id="${esc(a.id)}" class="secondary">立即撤下公開公告</button>` : ""}</details>`).join("")}`;
+        content
+          .querySelectorAll<HTMLButtonElement>("[data-unpublish]")
+          .forEach((button) =>
+            action(button, async () => {
+              await api("/manage/unpublish", "POST", {
+                kind: button.dataset.unpublish,
+                id: button.dataset.recordId,
+              });
+              if (active()) await render();
+            }),
+          );
+        content
+          .querySelectorAll<HTMLButtonElement>("[data-staff-method]")
+          .forEach((button) =>
+            action(button, async () => {
+              const editor = button.closest<HTMLElement>(
+                ".public-staff-editor",
+              )!;
+              const userId = editor
+                .querySelector<HTMLInputElement>(".staff-user-id")!
+                .value.trim();
+              if (
+                !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(
+                  userId,
+                )
+              )
+                throw Error("請輸入有效的工作人員帳號 UUID。");
+              await api("/manage/staff", button.dataset.staffMethod!, {
+                event_id: editor.dataset.eventId,
+                user_id: userId,
+              });
+              feedback(
+                button.dataset.staffMethod === "POST"
+                  ? "已授權該帳號本活動的報到權限。"
+                  : "已撤銷該帳號本活動的報到權限。管理員仍保有報到權限。",
+              );
+            }),
+          );
         content.querySelectorAll<HTMLFormElement>("form").forEach((form) => {
           form.onsubmit = async (ev) => {
             ev.preventDefault();
@@ -267,6 +415,12 @@ export function mountPublicEvents(client: SupabaseClient | null) {
               record.is_published = record.is_published === "on";
               if (form.dataset.kind === "event") {
                 record.capacity = Number(record.capacity);
+                if (!!record.checkin_opens_at !== !!record.checkin_closes_at)
+                  throw Error("請同時填入報到開始與結束時間，或同時留空。");
+                for (const k of ["checkin_opens_at", "checkin_closes_at"])
+                  record[k] = record[k]
+                    ? new Date(record[k] + ":00+08:00").toISOString()
+                    : null;
                 for (const k of [
                   "starts_at",
                   "ends_at",
@@ -305,6 +459,37 @@ export function mountPublicEvents(client: SupabaseClient | null) {
             : closed
               ? "<p>目前不開放報名。</p>"
               : '<p>報名會將你的帳號身分提供給主辦方作為出席管理使用，不會公開名單。</p><button id="event-register">確認報名</button>';
+          if (registered) {
+            const ticketBox = document.createElement("div");
+            ticketBox.className = "public-ticket";
+            ticketBox.innerHTML = "<h2>我的報到票券</h2><p>正在載入…</p>";
+            section.append(ticketBox);
+            void (async () => {
+              try {
+                const ticket = await api(`/${e.id}/ticket`);
+                const { BrowserQRCodeSvgWriter } =
+                  await import("@zxing/browser");
+                if (!active()) return;
+                if (!/^ntucc_ticket_[a-f0-9]{64}$/.test(ticket.token))
+                  throw Error("票券格式錯誤");
+                ticketBox.innerHTML = `<h2>我的報到票券</h2><p>請在現場出示此 QR。票券等同報到憑證，請勿公開分享；取消報名後失效。</p><div class="public-ticket-qr"></div><details><summary>顯示票券代碼</summary><code class="event-secret">${esc(ticket.token)}</code></details><p>${ticket.checked_in_at ? `已於 ${esc(date(ticket.checked_in_at))} 報到` : "尚未報到"}</p>`;
+                const svg = new BrowserQRCodeSvgWriter().write(
+                  ticket.token,
+                  280,
+                  280,
+                );
+                svg.setAttribute("role", "img");
+                svg.setAttribute("aria-label", "個人活動報到 QR 票券");
+                ticketBox.querySelector(".public-ticket-qr")!.append(svg);
+              } catch (error) {
+                if (active())
+                  ticketBox.textContent =
+                    error instanceof Error
+                      ? error.message
+                      : "票券載入失敗，請重新整理。";
+              }
+            })();
+          }
           const b = section.querySelector<HTMLButtonElement>("button");
           if (b)
             action(b, async () => {
@@ -347,6 +532,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
     if (isPublicRoute()) void render();
     else {
       generation++;
+      releaseCamera();
       location.reload();
     }
   });
@@ -358,6 +544,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
       isPublicRoute()
     ) {
       generation++;
+      releaseCamera();
       root.textContent = "登入狀態已更新，正在重新載入…";
       setTimeout(() => {
         if (isPublicRoute()) void render();
