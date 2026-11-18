@@ -66,7 +66,12 @@ export function isPublicRoute() {
 export function mountPublicEvents(client: SupabaseClient | null) {
   const root = document.querySelector<HTMLElement>("#app")!;
   let generation = 0;
-  const request = async (expectedSubject: string | null, path = "", method = "GET", payload?: unknown) => {
+  const request = async (
+    expectedSubject: string | null,
+    path = "",
+    method = "GET",
+    payload?: unknown,
+  ) => {
     const session = client
       ? (await client.auth.getSession()).data.session
       : null;
@@ -194,6 +199,37 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           );
         return;
       }
+      const rosterRoute = path.match(
+        /^#event-admin\/([0-9a-f-]{36})(?:\?page=([1-9][0-9]*))?$/i,
+      );
+      if (rosterRoute) {
+        if (!admin) {
+          content.innerHTML =
+            '<h1>活動報名管理</h1><p>需要已驗證的管理員權限。</p><a href="#event-admin">返回管理</a>';
+          return;
+        }
+        const eventId = rosterRoute[1];
+        const requestedPage = Number(rosterRoute[2] ?? 1);
+        if (!Number.isSafeInteger(requestedPage)) throw Error("無效的頁碼。");
+        content.innerHTML =
+          '<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p role="status">正在載入報名名單…</p>';
+        try {
+          const roster = await api(`/manage/${eventId}?page=${requestedPage}`);
+          if (!active()) return;
+          const pages = Math.max(1, Math.ceil(roster.total / roster.page_size));
+          const pageLink = (page: number) =>
+            `#event-admin/${eventId}?page=${page}`;
+          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p>活動識別碼：<code class="public-roster-id">${esc(eventId)}</code></p><p>已報名 <strong>${esc(roster.registered)}</strong> 人 · 已取消 <strong>${esc(roster.cancelled)}</strong> 人 · 共 ${esc(roster.total)} 筆</p><p>僅供管理員辦理活動聯繫與報到使用，請勿公開或轉傳名單。姓名與電子郵件來自既有帳號資料；缺少資料時顯示帳號識別碼。舊會員活動與餐盒資料不包含在內。</p>${roster.registrations.length ? `<div class="public-roster-scroll" role="region" aria-label="報名名單" tabindex="0"><table class="public-roster"><thead><tr><th scope="col">報名識別碼</th><th scope="col">報名者</th><th scope="col">狀態</th><th scope="col">最後更新（台北）</th></tr></thead><tbody>${roster.registrations.map((r: { id: string; user_id: string; status: string; updated_at: string; display_name?: string | null; email?: string | null }) => `<tr><td><code>${esc(r.id)}</code></td><td>${r.display_name ? `<span>${esc(r.display_name)}</span><br>` : ""}${r.email ? `<span>${esc(r.email)}</span>` : `<code>${esc(r.user_id)}</code>`}</td><td>${r.status === "registered" ? "已報名" : r.status === "cancelled" ? "已取消" : "未知狀態"}</td><td>${esc(date(r.updated_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>本頁沒有報名紀錄。</p>"}<nav class="public-roster-pages" aria-label="報名名單分頁">${roster.page > 1 ? `<a href="${esc(pageLink(roster.page - 1))}">上一頁</a>` : ""}<span>第 ${esc(roster.page)} 頁，共 ${esc(pages)} 頁（每頁 ${esc(roster.page_size)} 筆）</span>${roster.page < pages ? `<a href="${esc(pageLink(roster.page + 1))}">下一頁</a>` : ""}</nav>`;
+        } catch (error) {
+          if (!active()) return;
+          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p role="alert">${esc(error instanceof Error ? error.message : "無法載入名單")}</p><button id="roster-retry">重試</button>`;
+          action(
+            content.querySelector<HTMLButtonElement>("#roster-retry")!,
+            render,
+          );
+        }
+        return;
+      }
       if (path === "#event-admin") {
         if (!admin) {
           content.innerHTML =
@@ -219,7 +255,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
         const announcementForm = (a?: any) =>
           `<form class="public-editor" data-kind="announcement">${a ? `<input type="hidden" name="id" value="${esc(a.id)}">` : ""}<h2>${a ? "編輯公告" : "新增公開公告草稿"}</h2>${field("標題", "title", "text", a?.title)}<label>內容<textarea name="content" required>${esc(a?.content)}</textarea></label><label class="check"><input name="is_published" type="checkbox" ${a?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存公告</button></form>`;
-        content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}</details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}</details>`).join("")}`;
+        content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}<a href="#event-admin/${esc(e.id)}">查看報名名單與統計</a></details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}</details>`).join("")}`;
         content.querySelectorAll<HTMLFormElement>("form").forEach((form) => {
           form.onsubmit = async (ev) => {
             ev.preventDefault();
@@ -317,10 +353,15 @@ export function mountPublicEvents(client: SupabaseClient | null) {
   // Invalidate sensitive views synchronously on cross-tab account changes.
   // Defer getSession until outside Supabase's auth callback lock.
   client?.auth.onAuthStateChange((event) => {
-    if (["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event) && isPublicRoute()) {
+    if (
+      ["SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event) &&
+      isPublicRoute()
+    ) {
       generation++;
       root.textContent = "登入狀態已更新，正在重新載入…";
-      setTimeout(() => { if (isPublicRoute()) void render(); }, 0);
+      setTimeout(() => {
+        if (isPublicRoute()) void render();
+      }, 0);
     }
   });
   void render();
