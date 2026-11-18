@@ -16,11 +16,13 @@ test("iCalendar escapes text, folds UTF-8 and preserves identity and UTC", () =>
     updated_at: "2026-11-18T00:00:00Z",
     status: "cancelled",
     sequence: 2,
+    agenda: [{ time: "17:30", title: "入場", speaker: "講者\r\nBEGIN:VEVENT" }],
   };
   const ics = eventCalendar(e);
   for (const line of ics.split("\r\n"))
     assert.ok(Buffer.byteLength(line) <= 75);
   const unfolded = ics.replace(/\r\n /g, "");
+  assert.ok(unfolded.includes("17:30 入場"));
   assert.equal((unfolded.match(/\r\nBEGIN:VEVENT/g) || []).length, 1);
   assert.ok(unfolded.includes("DTSTART:20261130T163000Z"));
   assert.ok(unfolded.includes("STATUS:CANCELLED"));
@@ -34,6 +36,7 @@ test("public event API is allowlisted; verified external users can act only for 
     admin = false,
     tokenExists = true;
   const calls: { path: string; data: any; method: string }[] = [];
+  let bannedUntil: string | null = null;
   const server = createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -47,6 +50,7 @@ test("public event API is allowlisted; verified external users can act only for 
       res.end(JSON.stringify(v));
     };
     const user = {
+      banned_until: bannedUntil,
       id: U,
       email: "external@example.test",
       email_confirmed_at: confirmed ? "2026-01-01" : null,
@@ -54,6 +58,13 @@ test("public event API is allowlisted; verified external users can act only for 
     };
     if (path === "/auth/v1/user") return send(user);
     if (path === `/auth/v1/admin/users/${U}`) return send({ user });
+    if (
+      url.pathname === "/rest/v1/profiles" &&
+      url.searchParams.get("id")?.startsWith("in.")
+    )
+      return send([
+        { id: U, display_name: "External", email: "external@example.test" },
+      ]);
     if (url.pathname === "/rest/v1/profiles")
       return send({
         id: U,
@@ -65,11 +76,28 @@ test("public event API is allowlisted; verified external users can act only for 
         tokenExists ? { user_id: U, expires_at: "2099-01-01", id: E } : null,
       );
     if (url.pathname === "/rest/v1/public_events")
-      return send(url.searchParams.has("id") ? null : []);
+      return send(url.searchParams.has("id") ? (admin ? { id: E } : null) : []);
     if (url.pathname === "/rest/v1/public_announcements") return send([]);
-    if (url.pathname === "/rest/v1/event_registrations") return send(null);
+    if (url.pathname === "/rest/v1/event_registrations") {
+      if (req.method === "HEAD") {
+        res.setHeader("content-range", "0-0/1");
+        return send(null);
+      }
+      return send(
+        admin
+          ? [
+              {
+                id: E,
+                user_id: U,
+                status: "registered",
+                updated_at: "2026-01-01",
+              },
+            ]
+          : null,
+      );
+    }
     if (path === "/rest/v1/rpc/consume_quota") return send(true);
-    if (path === "/rest/v1/rpc/register_public_event")
+    if (path === "/rest/v1/rpc/submit_event_application")
       return send({
         id: E,
         status: data.p_cancel ? "cancelled" : "registered",
@@ -121,22 +149,40 @@ test("public event API is allowlisted; verified external users can act only for 
     );
     confirmed = false;
     assert.equal(
-      (await req("/" + E + "/registration", "POST", "jwt", {})).status,
+      (
+        await req("/" + E + "/registration", "POST", "jwt", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
       403,
     );
     confirmed = true;
     anonymous = true;
     assert.equal(
-      (await req("/" + E + "/registration", "POST", "jwt", {})).status,
+      (
+        await req("/" + E + "/registration", "POST", "jwt", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
       403,
     );
     anonymous = false;
     assert.equal(
-      (await req("/" + E + "/registration", "POST", "jwt", {})).status,
+      (
+        await req("/" + E + "/registration", "POST", "jwt", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
       200,
     );
     const rpc = calls.find(
-      (c) => c.path === "/rest/v1/rpc/register_public_event",
+      (c) => c.path === "/rest/v1/rpc/submit_event_application",
     )!;
     assert.equal(rpc.data.p_user, U);
     assert.equal(rpc.data.p_event, E);
@@ -150,11 +196,152 @@ test("public event API is allowlisted; verified external users can act only for 
     );
     assert.ok(calls.some((c) => c.path.includes("user_id=eq." + U)));
     assert.equal((await req("/manage", "GET", "jwt")).status, 403);
+    assert.equal((await req("/manage/" + E, "GET")).status, 401);
+    assert.equal((await req("/manage/" + E, "GET", "jwt")).status, 403);
+    assert.notEqual(
+      (await req("/manage/" + E, "GET", "ntucc_event_valid")).status,
+      200,
+    );
+    admin = true;
+    const roster = await req("/manage/" + E + "?page=1", "GET", "jwt");
+    assert.equal(roster.status, 200);
+    const rosterData = await roster.json();
+    assert.equal(rosterData.registrations[0].email, "external@example.test");
+    assert.equal(rosterData.page_size, 50);
+    assert.equal(
+      (await req("/manage/" + E + "?page=0", "GET", "jwt")).status,
+      400,
+    );
+    const eventRecord = {
+      title: "議程測試",
+      description: "公開介紹",
+      location: "會議室",
+      starts_at: "2099-12-23T18:00:00+08:00",
+      ends_at: "2099-12-23T19:00:00+08:00",
+      registration_closes_at: "2099-12-23T17:00:00+08:00",
+      checkin_opens_at: "2099-12-23T17:30:00+08:00",
+      checkin_closes_at: "2099-12-23T19:30:00+08:00",
+      capacity: 30,
+      status: "scheduled",
+      is_published: false,
+      agenda: [{ time: "18:00", title: "分享", speaker: "講者" }],
+    };
+    assert.equal(
+      (
+        await req("/manage", "POST", "jwt", {
+          kind: "event",
+          record: eventRecord,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (
+        await req("/manage", "POST", "jwt", {
+          kind: "event",
+          record: {
+            ...eventRecord,
+            agenda: Array.from({ length: 31 }, () => eventRecord.agenda[0]),
+          },
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await req("/manage", "POST", "jwt", {
+          kind: "event",
+          record: {
+            ...eventRecord,
+            agenda: [{ time: "18:00", title: "病歷號：12345678" }],
+          },
+        })
+      ).status,
+      422,
+    );
+    const record = {
+      id: "10000000-0000-4000-8000-a12345678900",
+      title: "安全公告",
+      content: "一般資訊",
+      is_published: true,
+    };
+    assert.equal(
+      (await req("/manage", "POST", "jwt", { kind: "announcement", record }))
+        .status,
+      200,
+    );
+    const writesBefore = calls.filter(
+      (c) =>
+        ["POST", "PATCH"].includes(c.method) &&
+        c.path.startsWith("/rest/v1/public_announcements"),
+    ).length;
+    assert.equal(
+      (
+        await req("/manage", "POST", "jwt", {
+          kind: "announcement",
+          record: { ...record, content: "病歷號：12345678" },
+        })
+      ).status,
+      422,
+    );
+    assert.equal(
+      calls.filter(
+        (c) =>
+          ["POST", "PATCH"].includes(c.method) &&
+          c.path.startsWith("/rest/v1/public_announcements"),
+      ).length,
+      writesBefore,
+    );
+    assert.equal(
+      (
+        await req("/manage/unpublish", "POST", "jwt", {
+          kind: "announcement",
+          id: record.id,
+        })
+      ).status,
+      200,
+    );
+    admin = false;
     assert.equal(
       (await req("/tokens", "POST", "ntucc_event_secret", {})).status,
       403,
     );
-    assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,200);
+    assert.equal(
+      (
+        await req("/" + E + "/registration", "POST", "ntucc_event_valid", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
+      200,
+    );
+    bannedUntil = "2099-01-01";
+    assert.equal(
+      (
+        await req("/" + E + "/registration", "POST", "ntucc_event_valid", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
+      401,
+    );
+    assert.equal(
+      (await req("/" + E + "/registration", "POST", "jwt", {})).status,
+      403,
+    );
+    bannedUntil = "2020-01-01";
+    assert.equal(
+      (
+        await req("/" + E + "/registration", "POST", "ntucc_event_valid", {
+          name: "同仁",
+          organization: "台大醫院",
+          contact_email: "personal@example.test",
+        })
+      ).status,
+      200,
+    );
     tokenExists = false;
     assert.equal(
       (await req("/" + E + "/registration", "POST", "ntucc_event_revoked", {}))

@@ -7,6 +7,14 @@ node_bundler = "esbuild"
 [functions.chat]
 timeout = 60
 [[redirects]]
+from = "/api/v1/event-photos/*"
+to = "/.netlify/functions/event-photos-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/event-photos"
+to = "/.netlify/functions/event-photos-api"
+status = 200
+[[redirects]]
 from = "/api/v1/events/*"
 to = "/.netlify/functions/events-api/:splat"
 status = 200
@@ -44,4 +52,4 @@ for = "/*"
 X-Content-Type-Options = "nosniff"
 Referrer-Policy = "no-referrer"
 Permissions-Policy = "camera=(self), microphone=(), geolocation=()"
-Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; frame-src 'self' blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"

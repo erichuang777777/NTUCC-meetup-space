@@ -38,10 +38,26 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/004_agent_contacts.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/005_member_management.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/006_public_events.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/007_event_checkin.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/checkin.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/rls.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/discussions.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/contacts.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/members.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/public-events.sql
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/public-events-concurrency.sh
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/checkin-concurrency.sh
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/migration008-fixture.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/008_registration_review.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/migration008-legacy.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/application.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/009_event_agenda.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/photo-storage-bootstrap.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/010_event_photos.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event-photos.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/011_event_photo_lifecycle.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event-photo-lifecycle.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/photo-cleanup-fairness.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/event-photo-lifecycle-concurrency.sh
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high
