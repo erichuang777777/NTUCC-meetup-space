@@ -82,9 +82,9 @@ const backend = createServer(async (req, res) => {
         assert(allowed.includes(fn));
         result = JSON.parse(
           sql(
-            `select ${fn}(${Object.entries(body)
+            `select to_json(${fn}(${Object.entries(body)
               .map(([k, v]) => `${k}=>${quote(v)}`)
-              .join(",")})`,
+              .join(",")}))`,
           ),
         );
       }
