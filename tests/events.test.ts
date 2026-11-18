@@ -34,6 +34,7 @@ test("public event API is allowlisted; verified external users can act only for 
     admin = false,
     tokenExists = true;
   const calls: { path: string; data: any; method: string }[] = [];
+  let bannedUntil: string | null = null;
   const server = createServer(async (req, res) => {
     let raw = "";
     for await (const c of req) raw += c;
@@ -47,6 +48,7 @@ test("public event API is allowlisted; verified external users can act only for 
       res.end(JSON.stringify(v));
     };
     const user = {
+      banned_until: bannedUntil,
       id: U,
       email: "external@example.test",
       email_confirmed_at: confirmed ? "2026-01-01" : null,
@@ -54,6 +56,8 @@ test("public event API is allowlisted; verified external users can act only for 
     };
     if (path === "/auth/v1/user") return send(user);
     if (path === `/auth/v1/admin/users/${U}`) return send({ user });
+    if (url.pathname === "/rest/v1/profiles" && url.searchParams.get("id")?.startsWith("in."))
+      return send([{id: U, display_name: "External", email: "external@example.test"}]);
     if (url.pathname === "/rest/v1/profiles")
       return send({
         id: U,
@@ -65,9 +69,12 @@ test("public event API is allowlisted; verified external users can act only for 
         tokenExists ? { user_id: U, expires_at: "2099-01-01", id: E } : null,
       );
     if (url.pathname === "/rest/v1/public_events")
-      return send(url.searchParams.has("id") ? null : []);
+      return send(url.searchParams.has("id") ? (admin ? {id:E} : null) : []);
     if (url.pathname === "/rest/v1/public_announcements") return send([]);
-    if (url.pathname === "/rest/v1/event_registrations") return send(null);
+    if (url.pathname === "/rest/v1/event_registrations") {
+      if (req.method === "HEAD") {res.setHeader("content-range", "0-0/1"); return send(null);}
+      return send(admin ? [{id:E,user_id:U,status:"registered",updated_at:"2026-01-01"}] : null);
+    }
     if (path === "/rest/v1/rpc/consume_quota") return send(true);
     if (path === "/rest/v1/rpc/register_public_event")
       return send({
@@ -150,10 +157,26 @@ test("public event API is allowlisted; verified external users can act only for 
     );
     assert.ok(calls.some((c) => c.path.includes("user_id=eq." + U)));
     assert.equal((await req("/manage", "GET", "jwt")).status, 403);
+    assert.equal((await req("/manage/"+E, "GET")).status,401);
+    assert.equal((await req("/manage/"+E, "GET", "jwt")).status,403);
+    assert.notEqual((await req("/manage/"+E, "GET", "ntucc_event_valid")).status,200);
+    admin = true;
+    const roster = await req("/manage/"+E+"?page=1", "GET", "jwt");
+    assert.equal(roster.status,200);
+    const rosterData = await roster.json();
+    assert.equal(rosterData.registrations[0].email,"external@example.test");
+    assert.equal(rosterData.page_size,50);
+    assert.equal((await req("/manage/"+E+"?page=0", "GET", "jwt")).status,400);
+    admin = false;
     assert.equal(
       (await req("/tokens", "POST", "ntucc_event_secret", {})).status,
       403,
     );
+    assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,200);
+    bannedUntil = "2099-01-01";
+    assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,401);
+    assert.equal((await req('/'+E+'/registration','POST','jwt',{})).status,403);
+    bannedUntil = "2020-01-01";
     assert.equal((await req('/'+E+'/registration','POST','ntucc_event_valid',{})).status,200);
     tokenExists = false;
     assert.equal(
