@@ -167,6 +167,12 @@ test("public event API is allowlisted; verified external users can act only for 
     assert.equal(rosterData.registrations[0].email,"external@example.test");
     assert.equal(rosterData.page_size,50);
     assert.equal((await req("/manage/"+E+"?page=0", "GET", "jwt")).status,400);
+    const record={id:"10000000-0000-4000-8000-a12345678900",title:"安全公告",content:"一般資訊",is_published:true};
+    assert.equal((await req("/manage","POST","jwt",{kind:"announcement",record})).status,200);
+    const writesBefore=calls.filter(c=>["POST","PATCH"].includes(c.method)&&c.path.startsWith("/rest/v1/public_announcements")).length;
+    assert.equal((await req("/manage","POST","jwt",{kind:"announcement",record:{...record,content:"病歷號：12345678"}})).status,422);
+    assert.equal(calls.filter(c=>["POST","PATCH"].includes(c.method)&&c.path.startsWith("/rest/v1/public_announcements")).length,writesBefore);
+    assert.equal((await req("/manage/unpublish","POST","jwt",{kind:"announcement",id:record.id})).status,200);
     admin = false;
     assert.equal(
       (await req("/tokens", "POST", "ntucc_event_secret", {})).status,
