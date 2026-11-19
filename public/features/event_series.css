@@ -1,0 +1,16 @@
+.es-form {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.es-row,
+.es-event {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.es-events ul {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
