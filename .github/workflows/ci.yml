@@ -67,5 +67,8 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/notifications.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/015_member_directory.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/member_directory.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/017_polls.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/polls.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/polls-concurrency.sh
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high

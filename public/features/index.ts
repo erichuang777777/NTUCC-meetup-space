@@ -4,3 +4,4 @@ export {};
 
 import "./notifications";
 import "./member_directory";
+import "./polls";
