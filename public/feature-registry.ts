@@ -27,6 +27,8 @@ export type FeatureCtx = {
   /** switch page (sets location.hash and re-renders) */
   navigate: (page: string) => void;
   isEnabled: (key: string) => boolean;
+  /** open the private-messages page with a conversation draft to this user */
+  openMessage: (userId: string) => void;
 };
 
 export type FeatureDef = {

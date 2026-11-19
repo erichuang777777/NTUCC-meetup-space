@@ -1,0 +1,36 @@
+.md-search {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.md-search input {
+  flex: 1 1 200px;
+}
+.md-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.md-chip {
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-size: 0.85rem;
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.85;
+}
+.md-chip.active {
+  font-weight: 600;
+  opacity: 1;
+}
+.md-list {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.md-editor {
+  margin-bottom: 16px;
+}
