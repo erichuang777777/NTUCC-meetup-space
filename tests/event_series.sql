@@ -8,8 +8,8 @@ insert into auth.users(id,email) values
 update profiles set role='admin',passcode_verified=true where id='00000000-0000-4000-8000-0000000000c1';
 update profiles set passcode_verified=true where id='00000000-0000-4000-8000-0000000000c2';
 -- source: 2030-01-10 18:00 Taipei (10:00Z), 2h, published, with agenda, checkin window, staff, registration, form
-insert into public_events(id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,is_published,checkin_opens_at,checkin_closes_at,agenda)
-values('e9000000-0000-4000-8000-000000000001','AI Meetup','介紹','會議室 A','2030-01-10T10:00:00Z','2030-01-10T12:00:00Z','2030-01-09T10:00:00Z',25,true,'2030-01-10T09:30:00Z','2030-01-10T11:00:00Z',
+insert into public_events(id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,waitlist_enabled,is_published,checkin_opens_at,checkin_closes_at,agenda)
+values('e9000000-0000-4000-8000-000000000001','AI Meetup','介紹','會議室 A','2030-01-10T10:00:00Z','2030-01-10T12:00:00Z','2030-01-09T10:00:00Z',25,true,true,'2030-01-10T09:30:00Z','2030-01-10T11:00:00Z',
  '[{"time":"18:00","title":"開場"},{"time":"18:30","title":"分享","speaker":"小明"},{"time":"晚間","title":"交流"}]');
 insert into public_events(id,title,starts_at,ends_at,registration_closes_at,capacity,is_published) values('e9000000-0000-4000-8000-000000000002','草稿活動','2030-02-10T10:00:00Z','2030-02-10T12:00:00Z','2030-02-09T10:00:00Z',10,false);
 insert into event_registrations(event_id,user_id,status,checked_in_at,ticket_token) values('e9000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-0000000000c2','registered',now(),'ntucc_ticket_'||repeat('a',64));
@@ -72,7 +72,7 @@ end$$;
 reset role;
 do $$declare sid uuid:=current_setting('es.series')::uuid;n uuid:=current_setting('es.clone')::uuid;r public_events;f event_feedback_forms;begin
  select * into r from public_events where id=n;
- if n='e9000000-0000-4000-8000-000000000001' or r.title<>'AI Meetup' or r.description<>'介紹' or r.location<>'會議室 A' or r.capacity<>25 or r.series_id<>sid then raise exception 'config not copied';end if;
+ if n='e9000000-0000-4000-8000-000000000001' or r.title<>'AI Meetup' or r.description<>'介紹' or r.location<>'會議室 A' or r.capacity<>25 or not r.waitlist_enabled or r.series_id<>sid then raise exception 'config not copied';end if;
  if r.is_published or r.status<>'scheduled' or r.sequence<>0 then raise exception 'clone must be unpublished draft';end if;
  if r.starts_at<>'2030-03-01T11:00:00Z' or r.ends_at<>'2030-03-01T14:00:00Z' then raise exception 'dates';end if;
  if r.registration_closes_at<>'2030-02-28T11:00:00Z' or r.checkin_opens_at<>'2030-03-01T10:30:00Z' or r.checkin_closes_at<>'2030-03-01T12:00:00Z' then raise exception 'relative windows %',r.registration_closes_at;end if;
