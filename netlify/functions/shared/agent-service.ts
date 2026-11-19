@@ -3,6 +3,7 @@ import { db, requireScope, type Actor } from "./auth-helper.js";
 import { checked, HttpError } from "./http.js";
 import { guard } from "./pii-guard.js";
 import { LIST } from "./spaces.js";
+import { filterHidden, isHidden } from "./moderation.js";
 export const paging = z.object({
   offset: z.coerce.number().int().min(0).max(100000).default(0),
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -26,7 +27,7 @@ export async function listProjects(actor: Actor, input: unknown) {
     .order("id")
     .range(p.offset, p.offset + p.limit - 1);
   return {
-    projects: checked(r),
+    projects: await filterHidden(db(), actor.id, "space", checked(r)),
     total: r.count,
     offset: p.offset,
     limit: p.limit,
@@ -42,6 +43,8 @@ export async function getProject(actor: Actor, id: string) {
       .maybeSingle(),
   );
   if (!s || (s.visibility !== "public" && s.owner_id !== actor.id))
+    throw new HttpError(404, "PROJECT_NOT_FOUND");
+  if (await isHidden(db(), actor.id, "space", s.id))
     throw new HttpError(404, "PROJECT_NOT_FOUND");
   return s;
 }
@@ -69,7 +72,7 @@ export async function listDiscussions(
     .order("id")
     .range(p.offset, p.offset + p.limit - 1);
   return {
-    threads: checked(r),
+    threads: await filterHidden(db(), actor.id, "thread", checked(r)),
     total: r.count,
     offset: p.offset,
     limit: p.limit,
@@ -87,7 +90,8 @@ export async function readDiscussion(actor: Actor, id: string, input: unknown) {
       .eq("id", uuid.parse(id))
       .maybeSingle(),
   );
-  if (!t) throw new HttpError(404, "THREAD_NOT_FOUND");
+  if (!t || (await isHidden(db(), actor.id, "thread", t.id)))
+    throw new HttpError(404, "THREAD_NOT_FOUND");
   await getProject(actor, t.space_id);
   const r = await db()
     .from("discussion_replies_read")
@@ -100,7 +104,7 @@ export async function readDiscussion(actor: Actor, id: string, input: unknown) {
     .range(p.offset, p.offset + p.limit - 1);
   return {
     thread: t,
-    replies: checked(r),
+    replies: await filterHidden(db(), actor.id, "reply", checked(r)),
     total: r.count,
     offset: p.offset,
     limit: p.limit,

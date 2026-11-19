@@ -3,6 +3,7 @@ import { parse } from "parse5";
 import { db, requireScope, type Actor } from "./auth-helper.js";
 import { HttpError, checked } from "./http.js";
 import { guard } from "./pii-guard.js";
+import { isHidden } from "./moderation.js";
 export const LIST =
   "id,owner_id,title,category_tag,summary,highlights,slide_count,reference_links,has_cover,votes,vibe_counts,slot_order,session_id,visibility,created_at";
 export function slideCount(html: string) {
@@ -139,6 +140,8 @@ export async function slides(id: string, actor: Actor | null) {
       .maybeSingle(),
   );
   if (!s || (s.owner_id !== actor.id && s.visibility !== "public"))
+    throw new HttpError(404, "SPACE_NOT_FOUND");
+  if (await isHidden(client, actor.id, "space", id))
     throw new HttpError(404, "SPACE_NOT_FOUND");
   return checked(
     await client
