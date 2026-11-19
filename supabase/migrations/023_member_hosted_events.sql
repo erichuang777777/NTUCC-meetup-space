@@ -147,4 +147,34 @@ revoke all on function public.enforce_members_only_registration(),public.save_ho
 grant execute on function public.save_hosted_event_request(uuid,uuid,text,text,text,timestamptz,timestamptz,integer),public.submit_hosted_event_request(uuid,uuid),
  public.cancel_hosted_event_request(uuid,uuid),public.review_hosted_event(uuid,uuid,text,text,boolean,boolean),public.revoke_hosted_event(uuid,uuid,text),public.hosted_event_registrations(uuid,uuid,integer) to service_role;
 grant execute on function public.hosted_event_admin_list() to authenticated,service_role;
+-- clone_event (022) predates audience (023) and waitlist_enabled (020): copy both so a
+-- cloned members-only event never becomes public. Same signature, grants are preserved.
+create or replace function public.clone_event(p_source uuid,p_starts_at timestamptz,p_ends_at timestamptz) returns uuid language plpgsql security definer set search_path=public as $$declare e public_events;d interval;shift integer;ag jsonb:='[]';it jsonb;t text;m integer;n public_events;f event_feedback_forms;begin
+ if not is_feature_enabled('event_series') then raise exception 'FEATURE_DISABLED';end if;
+ if not is_admin() then raise exception 'ADMIN_REQUIRED';end if;
+ if p_starts_at is null or p_ends_at is null or p_ends_at<=p_starts_at then raise exception 'INVALID_WINDOW';end if;
+ select * into e from public_events where id=p_source;
+ if not found then raise exception 'EVENT_NOT_FOUND';end if;
+ d:=p_starts_at-e.starts_at;
+ -- agenda times are "HH:MM" strings: shift by the change in Taipei start time-of-day; other formats are kept as-is
+ shift:=(extract(hour from (p_starts_at at time zone 'Asia/Taipei'))::int*60+extract(minute from (p_starts_at at time zone 'Asia/Taipei'))::int)
+  -(extract(hour from (e.starts_at at time zone 'Asia/Taipei'))::int*60+extract(minute from (e.starts_at at time zone 'Asia/Taipei'))::int);
+ for it in select * from jsonb_array_elements(e.agenda) loop
+  t:=it->>'time';
+  if t ~ '^([01]?[0-9]|2[0-3]):[0-5][0-9]$' then
+   m:=(((split_part(t,':',1)::int*60+split_part(t,':',2)::int+shift)%1440)+1440)%1440;
+   it:=jsonb_set(it,'{time}',to_jsonb(lpad((m/60)::text,2,'0')||':'||lpad((m%60)::text,2,'0')));
+  end if;
+  ag:=ag||it;
+ end loop;
+ insert into public_events(title,description,location,starts_at,ends_at,registration_closes_at,capacity,waitlist_enabled,audience,status,is_published,checkin_opens_at,checkin_closes_at,agenda,series_id)
+ values(e.title,e.description,e.location,p_starts_at,p_ends_at,least(e.registration_closes_at+d,p_starts_at),e.capacity,e.waitlist_enabled,e.audience,'scheduled',false,e.checkin_opens_at+d,e.checkin_closes_at+d,ag,e.series_id)
+ returning * into n;
+ select * into f from event_feedback_forms where event_id=p_source;
+ if found then
+  insert into event_feedback_forms(event_id,questions,opens_at,closes_at,is_anonymous,created_by,published_at)
+  values(n.id,f.questions,p_ends_at+(f.opens_at-e.ends_at),p_ends_at+(f.closes_at-e.ends_at),f.is_anonymous,auth.uid(),null);
+ end if;
+ return n.id;
+end$$;
 commit;
