@@ -2,4 +2,5 @@
 // public/features/<key>.ts and add a single import line below.
 export {};
 
+import "./notifications";
 import "./member_directory";
