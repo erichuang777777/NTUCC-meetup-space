@@ -11,3 +11,4 @@ import "./event_series";
 import "./forum_plus";
 import "./event_waitlist";
 import "./talk_proposals";
+import "./member_hosted_events";

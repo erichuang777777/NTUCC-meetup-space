@@ -12,7 +12,7 @@
 
 `public_events` 仍不開放瀏覽器直接讀取；同仁僅能透過 `event_series_events()` 取得已上架活動的最小欄位（不含名額、議程等），可見範圍沒有放寬。關閉 flag 不刪資料（`series_id` 與系列保留）。
 
-## 資料庫（migration `022_event_series.sql`）
+## 資料庫（migration `024_event_series.sql`）
 
 - `event_series(id, title ≤80, description ≤1000, slug unique, created_by, created_at, archived)`；`public_events.series_id`（nullable FK，系列刪除時設為 null）。
 - RLS：已驗證成員可讀未封存系列（管理員含封存），需 `is_feature_enabled('event_series')`；無直接寫入權限。
@@ -39,7 +39,7 @@
 
 ## 部署
 
-1. 執行 `022_event_series.sql`。
+1. 執行 `024_event_series.sql`。
 2. 部署 Netlify（`netlify.toml` 已加入 `/api/v1/event-series` 轉送）。
 3. 管理後台「功能開關」開啟 `event_series`。
 

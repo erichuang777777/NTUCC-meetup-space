@@ -88,8 +88,8 @@ create function public.clone_event(p_source uuid,p_starts_at timestamptz,p_ends_
   end if;
   ag:=ag||it;
  end loop;
- insert into public_events(title,description,location,starts_at,ends_at,registration_closes_at,capacity,waitlist_enabled,status,is_published,checkin_opens_at,checkin_closes_at,agenda,series_id)
- values(e.title,e.description,e.location,p_starts_at,p_ends_at,least(e.registration_closes_at+d,p_starts_at),e.capacity,e.waitlist_enabled,'scheduled',false,e.checkin_opens_at+d,e.checkin_closes_at+d,ag,e.series_id)
+ insert into public_events(title,description,location,starts_at,ends_at,registration_closes_at,capacity,waitlist_enabled,audience,status,is_published,checkin_opens_at,checkin_closes_at,agenda,series_id)
+ values(e.title,e.description,e.location,p_starts_at,p_ends_at,least(e.registration_closes_at+d,p_starts_at),e.capacity,e.waitlist_enabled,e.audience,'scheduled',false,e.checkin_opens_at+d,e.checkin_closes_at+d,ag,e.series_id)
  returning * into n;
  select * into f from event_feedback_forms where event_id=p_source;
  if found then

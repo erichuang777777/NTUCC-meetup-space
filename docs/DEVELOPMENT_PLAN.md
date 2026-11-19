@@ -56,9 +56,9 @@
 | F6  | `forum_plus`            | 論壇強化                     | 019       | B    |
 | F7  | `event_waitlist`        | 名額上限與候補               | 020       | B    |
 | F8  | `talk_proposals`        | 徵稿／講者報名               | 021       | B    |
-| F9  | `event_series`          | 活動系列與複製               | 022       | B    |
+| F9  | `event_series`          | 活動系列與複製               | 024       | B    |
 | F10 | `member_hosted_events`  | 同仁發起活動（需審核）       | 023       | B    |
-| F11 | `event_archive`         | 活動回顧與知識庫             | 024       | C    |
+| F11 | `event_archive`         | 活動回顧與知識庫             | 022       | C    |
 | F12 | `global_search`         | 全站搜尋                     | 025       | C    |
 | F13 | `admin_dashboard`       | 營運儀表板                   | 026       | C    |
 | F14 | `participation_history` | 個人參與紀錄                 | 027       | C    |
