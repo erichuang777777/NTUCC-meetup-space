@@ -23,6 +23,10 @@ from = "/api/v1/events"
 to = "/.netlify/functions/events-api"
 status = 200
 [[redirects]]
+from = "/api/v1/event-feedback/*"
+to = "/.netlify/functions/event-feedback-api/:splat"
+status = 200
+[[redirects]]
 from = "/api/v1/agent/*"
 to = "/.netlify/functions/agent-api/:splat"
 status = 200
