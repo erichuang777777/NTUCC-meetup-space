@@ -14,6 +14,7 @@ export const NOTIFICATION_TYPES: { type: string; label: string }[] = [
   { type: "forum_mention", label: "討論中被提到" },
   { type: "forum_accepted", label: "回覆被選為最佳解答" },
   { type: "forum_followed_reply", label: "追蹤的討論有新回覆" },
+  { type: "waitlist_promoted", label: "活動候補遞補成功" },
 ];
 
 type Row = {
