@@ -11,6 +11,7 @@ export const NOTIFICATION_TYPES: { type: string; label: string }[] = [
   { type: "event_feedback", label: "會後問卷開放" },
   { type: "report_handled", label: "檢舉處理結果" },
   { type: "content_hidden", label: "內容被隱藏" },
+  { type: "hosted_event_reviewed", label: "發起活動審核結果" },
 ];
 
 type Row = {

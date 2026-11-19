@@ -11,6 +11,7 @@ import {
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
 import { guard } from "./shared/pii-guard.js";
 import { eventCalendar } from "./shared/event-calendar.js";
+import { isMemberViewer } from "./shared/event-audience.js";
 const eventFields =
   "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence,checkin_opens_at,checkin_closes_at,agenda";
 const announcementFields = "id,title,content,created_at";
@@ -348,12 +349,16 @@ export default async function handler(req: Request, context?: { ip?: string }) {
     }
     if (!id) {
       if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const audiences = (await isMemberViewer(req))
+        ? ["public", "members"]
+        : ["public"];
       return json({
         events: checked(
           await client
             .from("public_events")
             .select(eventFields)
             .eq("is_published", true)
+            .in("audience", audiences)
             .order("starts_at", { ascending: false })
             .limit(500),
         ),
@@ -544,6 +549,10 @@ export default async function handler(req: Request, context?: { ip?: string }) {
         .select(eventFields)
         .eq("id", id)
         .eq("is_published", true)
+        .in(
+          "audience",
+          (await isMemberViewer(req)) ? ["public", "members"] : ["public"],
+        )
         .maybeSingle(),
     );
     if (!event) throw new HttpError(404, "NOT_FOUND");
