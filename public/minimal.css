@@ -996,3 +996,59 @@ dialog h2 {
 .member-list + details {
   margin-top: 20px;
 }
+
+/* feature registry: top-bar slot, "更多" nav overflow, flag toggles */
+.top-features {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.top-features:empty {
+  display: none;
+}
+.bottom-nav {
+  overflow-x: auto;
+}
+.nav-more-menu {
+  position: fixed;
+  right: 12px;
+  bottom: calc(76px + env(safe-area-inset-bottom));
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 6px;
+  width: min(360px, calc(100% - 24px));
+  padding: 8px;
+  background: #fffefc;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 30px #183e3024;
+  z-index: 30;
+}
+.nav-more-menu[hidden] {
+  display: none;
+}
+.nav-more-menu button {
+  width: auto;
+}
+.nav-more-menu button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  background: transparent;
+  color: #738376;
+  border-radius: 10px;
+}
+.nav-more-menu button.active {
+  color: #315e46;
+  background: #e6eee3;
+}
+.nav-more-menu svg {
+  width: 20px;
+  height: 20px;
+}
+.nav-more-menu span {
+  font-size: 10px;
+  white-space: nowrap;
+}

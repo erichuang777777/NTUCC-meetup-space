@@ -8,6 +8,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { z } from "zod";
 import { authenticate, requireScope } from "./shared/auth-helper.js";
 import { db } from "./shared/auth-helper.js";
+import { filterHidden } from "./shared/moderation.js";
 import {
   LIST,
   question,
@@ -62,21 +63,32 @@ export default async (req: Request) => {
       async (uri) => {
         requireScope(requireActor(), "projects:read");
         requireScope(requireActor(), "discussions:read");
-        const spaces = checked(
-          await db()
-            .from("spaces")
-            .select(LIST)
-            .eq("visibility", "public")
-            .order("votes", { ascending: false }),
+        const actorId = requireActor().id;
+        const spaces = await filterHidden(
+          db(),
+          actorId,
+          "space",
+          checked(
+            await db()
+              .from("spaces")
+              .select(LIST)
+              .eq("visibility", "public")
+              .order("votes", { ascending: false }),
+          ),
         );
-        const qa = checked(
-          await db()
-            .from("qa_public")
-            .select(
-              "id,space_id,question_text,is_anonymous,author_name,is_resolved,upvotes",
-            )
-            .order("upvotes", { ascending: false })
-            .limit(100),
+        const qa = await filterHidden(
+          db(),
+          actorId,
+          "qa",
+          checked(
+            await db()
+              .from("qa_public")
+              .select(
+                "id,space_id,question_text,is_anonymous,author_name,is_resolved,upvotes",
+              )
+              .order("upvotes", { ascending: false })
+              .limit(100),
+          ),
         );
         return {
           contents: [
@@ -149,7 +161,12 @@ export default async (req: Request) => {
               "%" + keyword.replace(/[%_]/g, "") + "%",
             );
           if (department) query = query.eq("department", department);
-          return checked(await query);
+          return filterHidden(
+            db(),
+            requireActor().id,
+            "pain_point",
+            checked(await query),
+          );
         }),
     );
     server.registerTool(

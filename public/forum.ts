@@ -1,6 +1,18 @@
 import workflowCover from "./images/covers/workflow.svg?url";
 import notesCover from "./images/covers/notes.svg?url";
 import boardCover from "./images/covers/board.svg?url";
+import { reportAttrs } from "./features/content_reports";
+import {
+  fpLoadThreads,
+  fpLoadDetail,
+  fpListBadges,
+  fpThreadBadges,
+  fpThreadBar,
+  fpReplyBar,
+  fpBind,
+  fpAttachMention,
+  type FpDetail,
+} from "./features/forum_plus";
 // Project discussions: paginated per-project topics, signed-in replies and moderation.
 const e = (v: unknown) =>
   String(v ?? "").replace(
@@ -220,8 +232,12 @@ export async function mountForum(root: HTMLElement, o: ForumOptions) {
       rows = r.data;
       total = r.count ?? rows.length;
     }
+    const fp = await fpLoadThreads(
+      o.demo ? null : o.client,
+      rows.map((t) => t.id),
+    );
     if (version !== active || ticket !== request || !root.isConnected) return;
-    root.innerHTML = `<h2 class="sr-only">專案討論</h2><div class="forum-toolbar"><form id="topic-search"><input type="search" aria-label="搜尋這個專案的討論" name="query" placeholder="搜尋討論" value="${e(query)}"></form><details class="action-menu filter-menu"><summary aria-label="討論篩選">篩選</summary><div class="menu-items"><label>類型<select id="topic-kind">${[["", "全部"], ...Object.entries(kinds)].map(([id, label]) => `<option value="${id}" ${id === kind ? "selected" : ""}>${label}</option>`).join("")}</select></label><label>排序<select id="topic-order"><option value="active" ${order === "active" ? "selected" : ""}>最近活躍</option><option value="new" ${order === "new" ? "selected" : ""}>最新發表</option></select></label><button id="refresh-topics">更新討論</button></div></details><button id="new-topic">新增討論</button></div><div class="topic-list">${rows.map((t) => `<button class="topic-row" data-topic="${e(t.id)}"><span class="topic-avatar">${e(t.author_name.slice(0, 1))}</span><span class="topic-main"><strong>${e(t.title)}</strong><span class="muted">${e(t.author_name)} · ${date(t.last_activity_at)}${t.is_pinned ? " · 置頂" : ""}${t.is_resolved ? " · 已解決" : ""}</span></span><span class="topic-count">${t.reply_count}<small>回覆</small></span></button>`).join("") || '<p class="empty">還沒有符合的討論</p>'}</div>${total > 20 ? `<div class="row forum-pagination"><span class="muted">${page + 1} / ${Math.ceil(total / 20)}</span><div class="actions"><button id="topics-prev" class="ghost" ${page === 0 ? "disabled" : ""}>上一頁</button><button id="topics-next" class="ghost" ${(page + 1) * 20 >= total ? "disabled" : ""}>下一頁</button></div></div>` : ""}`;
+    root.innerHTML = `<h2 class="sr-only">專案討論</h2><div class="forum-toolbar"><form id="topic-search"><input type="search" aria-label="搜尋這個專案的討論" name="query" placeholder="搜尋討論" value="${e(query)}"></form><details class="action-menu filter-menu"><summary aria-label="討論篩選">篩選</summary><div class="menu-items"><label>類型<select id="topic-kind">${[["", "全部"], ...Object.entries(kinds)].map(([id, label]) => `<option value="${id}" ${id === kind ? "selected" : ""}>${label}</option>`).join("")}</select></label><label>排序<select id="topic-order"><option value="active" ${order === "active" ? "selected" : ""}>最近活躍</option><option value="new" ${order === "new" ? "selected" : ""}>最新發表</option></select></label><button id="refresh-topics">更新討論</button></div></details><button id="new-topic">新增討論</button></div><div class="topic-list">${rows.map((t) => `<button class="topic-row" data-topic="${e(t.id)}"><span class="topic-avatar">${e(t.author_name.slice(0, 1))}</span><span class="topic-main"><strong>${e(t.title)}</strong><span class="muted">${e(t.author_name)} · ${date(t.last_activity_at)}${t.is_pinned ? " · 置頂" : ""}${t.is_resolved ? " · 已解決" : ""}${fpListBadges(fp.get(t.id))}</span></span><span class="topic-count">${t.reply_count}<small>回覆</small></span></button>`).join("") || '<p class="empty">還沒有符合的討論</p>'}</div>${total > 20 ? `<div class="row forum-pagination"><span class="muted">${page + 1} / ${Math.ceil(total / 20)}</span><div class="actions"><button id="topics-prev" class="ghost" ${page === 0 ? "disabled" : ""}>上一頁</button><button id="topics-next" class="ghost" ${(page + 1) * 20 >= total ? "disabled" : ""}>下一頁</button></div></div>` : ""}`;
     buttons();
     root.querySelector<HTMLElement>("#refresh-topics")!.onclick = () =>
       void run(list);
@@ -266,6 +282,10 @@ export async function mountForum(root: HTMLElement, o: ForumOptions) {
       .join(
         "",
       )}</select></label><label>討論標題<input name="title" maxlength="160" required placeholder="讓大家一眼了解你想討論的事"></label><label>內容<textarea name="body" required maxlength="6000" placeholder="分享你的問題或實作心得，請勿包含病患個資。"></textarea></label><button type="submit">發布討論</button></form></div>`;
+    fpAttachMention(
+      root.querySelector<HTMLTextAreaElement>("#compose-topic textarea"),
+      o.demo ? null : o.client,
+    );
     root.querySelector<HTMLElement>("#cancel-topic")!.onclick = () =>
       void run(list);
     bindForm(root.querySelector("#compose-topic")!, async (f) => {
@@ -314,6 +334,13 @@ export async function mountForum(root: HTMLElement, o: ForumOptions) {
       replies = r.data;
       total = r.count ?? 0;
     }
+    const fp = t
+      ? await fpLoadDetail(
+          o.demo ? null : o.client,
+          t.id,
+          replies.map((r) => r.id),
+        )
+      : ({ replies: new Map() } as FpDetail);
     if (version !== active || ticket !== request || !root.isConnected) return;
     if (!t) {
       root.innerHTML =
@@ -322,11 +349,16 @@ export async function mountForum(root: HTMLElement, o: ForumOptions) {
         o.navigate();
       return;
     }
-    root.innerHTML = `<button id="back-topics" class="ghost">← 返回這個專案的討論</button><article class="thread-opening"><span class="badge">${e(kinds[t.kind])}</span> ${t.is_pinned ? '<span class="badge">📌 置頂</span>' : ""}${t.is_resolved ? '<span class="badge">✅ 已解決</span>' : ""}<h2>${e(t.title)}</h2><p class="muted">${e(t.author_name)}${t.author_id === o.space.owner_id ? " · 專案分享者" : ""} · ${date(t.created_at)}</p><p class="thread-body">${e(t.body)}</p>${mod ? `<details class="action-menu thread-menu"><summary>管理</summary><div class="menu-items"><button class="ghost" data-mod="pin" data-value="${!t.is_pinned}">${t.is_pinned ? "取消置頂" : "置頂主題"}</button><button class="ghost" data-mod="resolve" data-value="${!t.is_resolved}">${t.is_resolved ? "重新開啟" : "標記已解決"}</button><button class="danger" data-mod="hide_thread" data-value="true">隱藏此主題</button></div></details>` : ""}</article><div class="row"><h3>${total} 則回覆</h3><button id="refresh-replies" class="icon-button" aria-label="更新回覆">↻</button></div><div class="replies">${replies.map((r) => `<article class="reply"><div class="topic-avatar">${e(r.author_name.slice(0, 1))}</div><div><div class="row"><span class="muted">${e(r.author_name)}${r.author_id === o.space.owner_id ? " · 專案分享者" : ""} · ${date(r.created_at)}</span>${mod ? `<button class="ghost" data-hide-reply="${e(r.id)}">隱藏</button>` : ""}</div><p class="thread-body">${e(r.body)}</p></div></article>`).join("") || ""}</div>${total > 50 ? `<div class="actions"><button id="reply-prev" class="ghost" ${replyPage === 0 ? "disabled" : ""}>較早回覆</button><button id="reply-next" class="ghost" ${(replyPage + 1) * 50 >= total ? "disabled" : ""}>更多回覆</button></div>` : ""}<form id="reply-form" class="reply-composer"><label>回覆這個討論<textarea name="body" required maxlength="6000" placeholder="回覆…"></textarea></label><button type="submit">送出回覆</button></form>`;
+    root.innerHTML = `<button id="back-topics" class="ghost">← 返回這個專案的討論</button><article class="thread-opening"${reportAttrs("thread", t.id, t.author_id)}><span class="badge">${e(kinds[t.kind])}</span> ${t.is_pinned ? '<span class="badge">📌 置頂</span>' : ""}${t.is_resolved ? '<span class="badge">✅ 已解決</span>' : ""}${fpThreadBadges(fp.thread)}<h2>${e(t.title)}</h2><p class="muted">${e(t.author_name)}${t.author_id === o.space.owner_id ? " · 專案分享者" : ""} · ${date(t.created_at)}</p><p class="thread-body">${e(t.body)}</p>${fpThreadBar(fp.thread, o.admin)}${mod ? `<details class="action-menu thread-menu"><summary>管理</summary><div class="menu-items"><button class="ghost" data-mod="pin" data-value="${!t.is_pinned}">${t.is_pinned ? "取消置頂" : "置頂主題"}</button><button class="ghost" data-mod="resolve" data-value="${!t.is_resolved}">${t.is_resolved ? "重新開啟" : "標記已解決"}</button><button class="danger" data-mod="hide_thread" data-value="true">隱藏此主題</button></div></details>` : ""}</article><div class="row"><h3>${total} 則回覆</h3><button id="refresh-replies" class="icon-button" aria-label="更新回覆">↻</button></div><div class="replies">${replies.map((r) => `<article class="reply"${reportAttrs("reply", r.id, r.author_id)}><div class="topic-avatar">${e(r.author_name.slice(0, 1))}</div><div><div class="row"><span class="muted">${e(r.author_name)}${r.author_id === o.space.owner_id ? " · 專案分享者" : ""} · ${date(r.created_at)}</span>${mod ? `<button class="ghost" data-hide-reply="${e(r.id)}">隱藏</button>` : ""}</div><p class="thread-body">${e(r.body)}</p>${fpReplyBar(t.id, r.id, fp.thread, fp.replies.get(r.id), o.admin || o.actorId === t.author_id)}</div></article>`).join("") || ""}</div>${total > 50 ? `<div class="actions"><button id="reply-prev" class="ghost" ${replyPage === 0 ? "disabled" : ""}>較早回覆</button><button id="reply-next" class="ghost" ${(replyPage + 1) * 50 >= total ? "disabled" : ""}>更多回覆</button></div>` : ""}<form id="reply-form" class="reply-composer"><label>回覆這個討論<textarea name="body" required maxlength="6000" placeholder="回覆…"></textarea></label><button type="submit">送出回覆</button></form>`;
     root.querySelector<HTMLElement>("#back-topics")!.onclick = () =>
       o.navigate();
     root.querySelector<HTMLElement>("#refresh-replies")!.onclick = () =>
       void run(detail);
+    fpBind(root, o.demo ? null : o.client, o.toast, detail);
+    fpAttachMention(
+      root.querySelector<HTMLTextAreaElement>("#reply-form textarea"),
+      o.demo ? null : o.client,
+    );
     bindForm(root.querySelector("#reply-form")!, async (f) => {
       await action("thread_reply", { thread_id: t.id, body: f.get("body") });
       replyPage = Math.floor(total / 50);

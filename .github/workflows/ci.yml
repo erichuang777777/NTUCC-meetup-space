@@ -61,5 +61,22 @@ jobs:
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/event-photo-lifecycle-concurrency.sh
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/012_guest_registration.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/guest-registration.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/013_feature_flags.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/feature-flags.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/014_notifications.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/notifications.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/015_member_directory.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/member_directory.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/016_event_feedback.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_feedback.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/017_polls.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/polls.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/polls-concurrency.sh
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/018_content_reports.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/content_reports.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/019_forum_plus.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/forum_plus.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/022_event_series.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_series.sql
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high

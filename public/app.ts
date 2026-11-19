@@ -6,6 +6,16 @@ import { mountForum, coverFor } from "./forum";
 import { createClient } from "@supabase/supabase-js";
 import { scanValue, maskValue } from "./pii";
 import { sandboxDocument } from "./player";
+import { loadFeatureFlags, allFlags, isDemoFlags, isEnabled } from "./features";
+import {
+  featureForPage,
+  featureNavs,
+  featureAdminPanels,
+  featureTopbars,
+  type FeatureCtx,
+} from "./feature-registry";
+import "./features/index";
+import { reportAttrs } from "./features/content_reports";
 const inviteFragment = location.hash.match(
   /^#invite=(ntucc_inv_[a-f0-9]{64})$/,
 );
@@ -218,8 +228,37 @@ async function send(action: string, payload: any = {}, reviewContent = true) {
   }
   return data;
 }
+function featureCtx(): FeatureCtx {
+  return {
+    client,
+    user,
+    profile,
+    demo,
+    isAdmin: profile?.role === "admin",
+    esc,
+    toast,
+    run,
+    review,
+    navigate: (p) => {
+      page = p;
+      filter = "全部";
+      search = "";
+      location.hash = p;
+      render();
+    },
+    isEnabled,
+    openMessage: (userId) => {
+      contactTarget = userId;
+      contactProject = undefined;
+      page = "messages";
+      history.pushState(null, "", "#messages");
+      render();
+    },
+  };
+}
 async function load() {
   if (!demo && !profile?.passcode_verified) return;
+  await loadFeatureFlags(client);
   if (demo) {
     spaces = demoSpaces;
     announcements = [
@@ -349,7 +388,23 @@ function render() {
     return;
   }
   $("#app").innerHTML =
-    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="top-actions"><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">預覽 · 示例資料</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div></div></main><nav class="bottom-nav" aria-label="主要功能">${[...navs, ...(profile?.role === "admin" ? [["admin", "管理後台"]] : [])].map(([id, label]) => `<button data-nav="${id}" aria-label="${label}" ${page === id || (page === "project" && id === "stage") || (page === "members" && id === "admin") ? 'aria-current="page"' : ""} class="${page === id || (page === "project" && id === "stage") || (page === "members" && id === "admin") ? "active" : ""}">${icon(id)}<span>${label}</span></button>`).join("")}</nav></div>`;
+    `<div class="shell"><main class="main"><header class="topbar"><a class="app-brand" href="#announcements">${icon("stage")}<span>NTUCC <small>Meetup Spaces</small></span></a><div class="top-actions"><span id="top-features" class="top-features"></span><span class="muted">${profile ? esc(profile.display_name) : "示例預覽"}</span><button id="auth" class="secondary">${user ? "登出" : "回登入頁"}</button></div></header><div class="content">${demo ? '<div class="notice">預覽 · 示例資料</div>' : ""}${user && !profile?.passcode_verified ? gate() : ""}<div id="view"></div></div></main><nav class="bottom-nav" aria-label="主要功能">${navHtml()}</nav>${moreMenuHtml()}</div>`;
+  const topFeatures = $("#top-features");
+  for (const topbar of featureTopbars()) {
+    try {
+      const el = topbar(featureCtx());
+      if (el) topFeatures.append(el);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  const moreButton = document.querySelector<HTMLElement>("#nav-more");
+  if (moreButton)
+    moreButton.onclick = () => {
+      const menu = $("#nav-more-menu");
+      menu.hidden = !menu.hidden;
+      moreButton.setAttribute("aria-expanded", String(!menu.hidden));
+    };
   document.querySelectorAll<HTMLElement>("[data-nav]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -383,6 +438,12 @@ function render() {
       );
       render();
     });
+  const feature = featureForPage(page);
+  if (feature?.render) {
+    const render = feature.render;
+    void run(async () => render($("#view"), featureCtx()));
+    return;
+  }
   switch (page) {
     case "members":
       if (profile?.role !== "admin") {
@@ -446,6 +507,38 @@ function render() {
     default:
       stage();
   }
+}
+// Base items stay on the bar; feature nav items are grouped under "更多".
+function navHtml() {
+  const isActive = (id: string) =>
+    page === id ||
+    (page === "project" && id === "stage") ||
+    (page === "members" && id === "admin");
+  const item = ([id, label]: string[]) =>
+    `<button data-nav="${id}" aria-label="${label}" ${isActive(id) ? 'aria-current="page"' : ""} class="${isActive(id) ? "active" : ""}">${icon(id)}<span>${label}</span></button>`;
+  const base = [
+    ...navs,
+    ...(profile?.role === "admin" ? [["admin", "管理後台"]] : []),
+  ];
+  const extra = featureNavs();
+  for (const n of extra) iconPaths[n.id] = n.iconPath;
+  if (!extra.length) return base.map(item).join("");
+  const moreActive = extra.some((n) => n.id === page);
+  return (
+    base.map(item).join("") +
+    `<button id="nav-more" aria-label="更多" aria-haspopup="true" aria-expanded="false" class="${extra.some((n) => n.id === page) ? "active" : ""}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>更多</span></button>`
+  );
+}
+// Rendered outside <nav>: the nav's backdrop-filter would otherwise trap position:fixed.
+function moreMenuHtml() {
+  const extra = featureNavs();
+  if (!extra.length) return "";
+  return `<div id="nav-more-menu" class="nav-more-menu bottom-nav-menu" hidden>${extra
+    .map(
+      (n) =>
+        `<button data-nav="${n.id}" aria-label="${n.label}" ${page === n.id ? 'aria-current="page"' : ""} class="${page === n.id ? "active" : ""}">${icon(n.id)}<span>${n.label}</span></button>`,
+    )
+    .join("")}</div>`;
 }
 function gate() {
   return `<div class="panel"><h2>歡迎加入院內交流</h2><p class="sub">請先輸入院內通關密語，完成驗證後即可查看公布欄與同仁分享。</p><form id="passcode-form"><label>院內通關密語<input id="passcode" type="password" required autocomplete="off" maxlength="100"></label><button>驗證並加入</button></form></div>`;
@@ -550,7 +643,7 @@ function slotLabel(s: any) {
   return `${fmt(start)}–${fmt(start + 10)}`;
 }
 function card(s: any, i: number) {
-  return `<article class="card"><button class="project-cover project-open" data-open="${esc(s.id)}" aria-label="查看專案：${esc(s.title)}"><div class="cover-image"><img ${s.has_cover ? `data-space-cover="${esc(s.id)}"` : ""} src="${esc(coverFor(s, i))}" alt="${esc(s.title)}的專案封面" loading="lazy" width="800" height="520">${s.has_cover || s.cover_image ? "" : '<span class="cover-caption">示意圖</span>'}</div><div class="card-body"><h3>${esc(s.title)}</h3><div class="project-meta"><span>${s.category_tag === "踩坑避雷" ? "踩坑避雷" : "實戰展示"}</span><span>♡ ${s.votes}</span></div></div></button></article>`;
+  return `<article class="card"${reportAttrs("space", s.id, s.owner_id)}><button class="project-cover project-open" data-open="${esc(s.id)}" aria-label="查看專案：${esc(s.title)}"><div class="cover-image"><img ${s.has_cover ? `data-space-cover="${esc(s.id)}"` : ""} src="${esc(coverFor(s, i))}" alt="${esc(s.title)}的專案封面" loading="lazy" width="800" height="520">${s.has_cover || s.cover_image ? "" : '<span class="cover-caption">示意圖</span>'}</div><div class="card-body"><h3>${esc(s.title)}</h3><div class="project-meta"><span>${s.category_tag === "踩坑避雷" ? "踩坑避雷" : "實戰展示"}</span><span>♡ ${s.votes}</span></div></div></button></article>`;
 }
 async function openSpace(id: string, threadId?: string, push = true) {
   currentSpace =
@@ -754,7 +847,7 @@ async function loadQuestions(s: any) {
     qs
       .map(
         (q: any) =>
-          `<div class="list-item"><div class="row"><span class="muted">${esc(q.author_name)} ${q.is_resolved ? "· ✅ 已回答" : ""}</span><button class="secondary" data-qa-vote="${q.id}">↑ ${q.upvotes}</button></div><p>${esc(q.question_text)}</p>${q.speaker_reply ? `<p class="sub">講者：${esc(q.speaker_reply)}</p>` : ""}${s.owner_id === user?.id && !q.is_resolved ? `<button data-resolve="${q.id}" class="ghost">標記已回答</button>` : ""}</div>`,
+          `<div class="list-item"${reportAttrs("qa", q.id)}><div class="row"><span class="muted">${esc(q.author_name)} ${q.is_resolved ? "· ✅ 已回答" : ""}</span><button class="secondary" data-qa-vote="${q.id}">↑ ${q.upvotes}</button></div><p>${esc(q.question_text)}</p>${q.speaker_reply ? `<p class="sub">講者：${esc(q.speaker_reply)}</p>` : ""}${s.owner_id === user?.id && !q.is_resolved ? `<button data-resolve="${q.id}" class="ghost">標記已回答</button>` : ""}</div>`,
       )
       .join("") || '<p class="sub">第一個好問題，從你開始。</p>';
   document.querySelectorAll<HTMLElement>("[data-qa-vote]").forEach(
@@ -1042,7 +1135,7 @@ function painView() {
       "這個困擾，你也有嗎？",
       "記錄那些重複、耗時的小事。你的日常痛點，也許就是下一個改善的起點。",
     ) +
-    `<div class="row"><input id="pain-search" class="search" placeholder="搜尋痛點或科別…" value="${esc(search)}"><button id="add-pain">＋ 痛點</button></div>${list.map((p) => `<article class="pain-item"><div class="row"><div><h3>${esc(p.title)}</h3><span class="muted">${esc(p.department || "跨職類")}</span></div><button data-pain-vote="${p.id}" class="text-button" aria-label="我也有這個困擾">＋ ${p.upvotes}</button></div><details><summary>內容</summary><p class="detail-summary">${esc(p.scenario)}</p><p class="sub">${esc(p.time_cost || "")}<br>${esc(p.ideal_outcome || "")}</p></details></article>`).join("") || '<div class="empty">目前沒有痛點</div>'}`;
+    `<div class="row"><input id="pain-search" class="search" placeholder="搜尋痛點或科別…" value="${esc(search)}"><button id="add-pain">＋ 痛點</button></div>${list.map((p) => `<article class="pain-item"${reportAttrs("pain_point", p.id, p.proposer_id)}><div class="row"><div><h3>${esc(p.title)}</h3><span class="muted">${esc(p.department || "跨職類")}</span></div><button data-pain-vote="${p.id}" class="text-button" aria-label="我也有這個困擾">＋ ${p.upvotes}</button></div><details><summary>內容</summary><p class="detail-summary">${esc(p.scenario)}</p><p class="sub">${esc(p.time_cost || "")}<br>${esc(p.ideal_outcome || "")}</p></details></article>`).join("") || '<div class="empty">目前沒有痛點</div>'}`;
   $("#add-pain").onclick = () => {
     if (requireMember()) painForm();
   };
@@ -1334,6 +1427,65 @@ function editSpace(s: any = {}) {
       }
     });
 }
+function mountAdminExtras() {
+  const view = $("#view");
+  const flagsPanel = document.createElement("div");
+  flagsPanel.className = "panel";
+  flagsPanel.id = "feature-flags-panel";
+  const flags = allFlags();
+  const fmt = (t: string | null) =>
+    t ? new Date(t).toLocaleString("zh-TW", { hour12: false }) : "—";
+  flagsPanel.innerHTML = `<h2>功能開關</h2><p class="sub">新功能預設關閉；關閉不會刪除資料，重新開啟後即恢復。</p>${
+    isDemoFlags()
+      ? '<p class="sub">預覽模式：所有功能皆視為開啟（僅供示範）。</p>'
+      : flags.length
+        ? flags
+            .map(
+              (f) =>
+                `<div class="list-item row"><span><b>${esc(f.label)}</b> <small class="muted">${esc(f.key)}</small><br><span class="sub">${esc(f.description)} · 更新於 ${esc(fmt(f.updated_at))}</span></span><label class="check"><input type="checkbox" data-flag="${esc(f.key)}" ${f.enabled ? "checked" : ""} aria-label="${esc(f.label)}">${f.enabled ? "已開啟" : "已關閉"}</label></div>`,
+            )
+            .join("")
+        : '<p class="empty">尚無功能開關資料（請確認已執行 migration 013）</p>'
+  }`;
+  view.append(flagsPanel);
+  flagsPanel.querySelectorAll<HTMLInputElement>("[data-flag]").forEach(
+    (box) =>
+      (box.onchange = () => {
+        box.disabled = true;
+        void run(async () => {
+          try {
+            const { error } = await client!.rpc("set_feature_flag", {
+              p_key: box.dataset.flag,
+              p_enabled: box.checked,
+            });
+            if (error) throw Error(error.message);
+            await loadFeatureFlags(client);
+            toast("功能開關已更新");
+            render();
+          } catch (e) {
+            box.checked = !box.checked;
+            box.disabled = false;
+            throw e;
+          }
+        });
+      }),
+  );
+  for (const panel of featureAdminPanels()) {
+    const holder = document.createElement("div");
+    holder.className = "panel";
+    holder.id = `admin-panel-${panel.id}`;
+    holder.innerHTML = `<h2>${esc(panel.label)}</h2><div class="admin-panel-body"></div>`;
+    view.append(holder);
+    void run(() =>
+      Promise.resolve(
+        panel.render(
+          holder.querySelector<HTMLElement>(".admin-panel-body")!,
+          featureCtx(),
+        ),
+      ),
+    );
+  }
+}
 async function adminView() {
   if (profile?.role !== "admin") {
     page = "stage";
@@ -1347,6 +1499,7 @@ async function adminView() {
       "管理活動、公告、展示順序與現場報到。管理員無法讀取同仁的私人草稿。",
     ) +
     `<div class="actions"><button id="new-session">建立活動場次</button><button id="new-announcement" class="secondary">發布公告</button><button id="manage-members" class="ghost">成員</button></div><div class="panel"><h2>本期報名與餐盒統計</h2><div id="registration-report">${activeSession ? "讀取中…" : "請先建立活動場次。"}</div></div><div class="panel"><h2>10 分鐘議程順序</h2><p class="sub">每個時段含 7 分鐘演示與 3 分鐘 Q&A。順序從 0 起算。</p>${spaces.map((s) => `<div class="list-item row"><span>${esc(s.title)}</span><form data-schedule="${s.id}" class="row"><input name="slot_order" type="number" min="0" max="100" value="${s.slot_order ?? 0}" aria-label="議程順序" style="width:75px"><button class="secondary">排入本期</button></form></div>`).join("")}</div>`;
+  mountAdminExtras();
   $("#manage-members").onclick = () => {
     page = "members";
     history.pushState(null, "", "#members");
@@ -1543,9 +1696,12 @@ window.addEventListener("popstate", () => {
       ),
     );
   else if (profile?.passcode_verified || demoEntered) {
-    page = navs.some((n) => n[0] === location.hash.slice(1))
-      ? location.hash.slice(1)
-      : "announcements";
+    page =
+      navs.some((n) => n[0] === location.hash.slice(1)) ||
+      featureNavs().some((n) => n.id === location.hash.slice(1)) ||
+      featureForPage(location.hash.slice(1))
+        ? location.hash.slice(1)
+        : "announcements";
     render();
   }
 });

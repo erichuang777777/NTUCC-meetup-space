@@ -12,6 +12,7 @@ const {
   BinaryBitmap,
   HybridBinarizer,
   QRCodeReader,
+  DecodeHintType,
 } = ZXing;
 import handler from "../netlify/functions/events-api.js";
 const U = "a0000000-0000-4000-8000-000000000001",
@@ -168,7 +169,8 @@ try {
       new BinaryBitmap(
         new HybridBinarizer(new RGBLuminanceSource(pixels, w, h)),
       ),
-      new Map(),
+      // The matrix is a synthetic, unrotated code: PURE_BARCODE avoids flaky finder-pattern detection.
+      new Map([[DecodeHintType.PURE_BARCODE, true]]),
     )
     .getText();
   assert.equal(decoded, ticket.token);
