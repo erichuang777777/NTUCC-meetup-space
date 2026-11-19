@@ -43,7 +43,9 @@ test("mobile layout fits viewport", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "公布欄", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".bottom-nav button svg")).toHaveCount(6);
+  await expect(page.locator(".bottom-nav button[data-nav] svg")).toHaveCount(6);
+  // Demo preview enables every feature flag, so feature navs collapse into "更多".
+  await expect(page.locator(".bottom-nav #nav-more")).toBeVisible();
   await page.getByRole("button", { name: "專案探索", exact: true }).click();
   await expect(page.locator("article.card")).toHaveCount(3);
   expect(
