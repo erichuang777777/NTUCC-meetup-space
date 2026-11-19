@@ -63,5 +63,7 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/guest-registration.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/013_feature_flags.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/feature-flags.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/014_notifications.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/notifications.sql
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high
