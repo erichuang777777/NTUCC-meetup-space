@@ -11,6 +11,9 @@ export const NOTIFICATION_TYPES: { type: string; label: string }[] = [
   { type: "event_feedback", label: "會後問卷開放" },
   { type: "report_handled", label: "檢舉處理結果" },
   { type: "content_hidden", label: "內容被隱藏" },
+  { type: "forum_mention", label: "討論中被提到" },
+  { type: "forum_accepted", label: "回覆被選為最佳解答" },
+  { type: "forum_followed_reply", label: "追蹤的討論有新回覆" },
 ];
 
 type Row = {

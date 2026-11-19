@@ -8,3 +8,4 @@ import "./polls";
 import "./event_feedback";
 import "./content_reports";
 import "./event_series";
+import "./forum_plus";
