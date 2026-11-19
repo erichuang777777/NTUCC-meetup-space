@@ -246,6 +246,13 @@ function featureCtx(): FeatureCtx {
       render();
     },
     isEnabled,
+    openMessage: (userId) => {
+      contactTarget = userId;
+      contactProject = undefined;
+      page = "messages";
+      history.pushState(null, "", "#messages");
+      render();
+    },
   };
 }
 async function load() {
