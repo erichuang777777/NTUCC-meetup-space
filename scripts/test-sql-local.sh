@@ -13,7 +13,7 @@ RUNAS=()
 "${RUNAS[@]}" "$BIN/pg_ctl" -D "$DATA" stop -m immediate >/dev/null 2>&1 || true
 rm -rf "$DATA"; mkdir -p "$DATA"; [ "$(id -u)" = 0 ] && chown postgres "$DATA"
 PWFILE="$(mktemp)"; echo test-only > "$PWFILE"; chmod 644 "$PWFILE"
-"${RUNAS[@]}" "$BIN/initdb" -D "$DATA" -U postgres --pwfile="$PWFILE" -A scram-sha-256 >/dev/null
+"${RUNAS[@]}" "$BIN/initdb" -D "$DATA" -U postgres --pwfile="$PWFILE" -A scram-sha-256 -E UTF8 --locale=C.UTF-8 >/dev/null
 rm -f "$PWFILE"
 "${RUNAS[@]}" "$BIN/pg_ctl" -D "$DATA" -o "-p $PORT -k /tmp -c listen_addresses=localhost" -l "$DATA/log" -w start >/dev/null
 trap '"${RUNAS[@]}" "$BIN/pg_ctl" -D "$DATA" stop -m fast >/dev/null 2>&1 || true' EXIT
