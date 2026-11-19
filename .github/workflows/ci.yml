@@ -74,5 +74,8 @@ jobs:
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/polls-concurrency.sh
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/018_content_reports.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/content_reports.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/020_event_waitlist.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_waitlist.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/event-waitlist-concurrency.sh
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high

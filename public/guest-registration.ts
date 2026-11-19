@@ -1,3 +1,4 @@
+import { waitlistLabel, WAITLIST_NOTE } from "./features/event_waitlist";
 // Guest credentials stay in memory unless the attendee explicitly saves their private link.
 const revisions = new WeakMap<Element, number>();
 const credentials = new Map<string, string>();
@@ -58,7 +59,8 @@ async function guestApi(
           INVALID_GUEST_TOKEN: "管理憑證無效，請使用先前保存的私人連結。",
           GUEST_TOKEN_REQUIRED: "請使用先前保存的私人管理連結。",
           GUEST_ACCESS_EXPIRED: "私人管理連結已到期，請聯絡活動主辦人。",
-          ORGANIZATION_NOT_ELIGIBLE: "很抱歉，本活動限定臺大醫療體系同仁參加，單位需包含台大或臺大。",
+          ORGANIZATION_NOT_ELIGIBLE:
+            "很抱歉，本活動限定臺大醫療體系同仁參加，單位需包含台大或臺大。",
           EVENT_NOT_FOUND: "活動目前未開放報名。",
           TICKET_UNAVAILABLE: "票券目前無法使用。",
           IDEMPOTENCY_CONFLICT: "重試資料與原報名不同，請重新開啟活動頁。",
@@ -93,7 +95,7 @@ export async function mountGuestRegistration(
       const registration = await guestApi(id);
       if (!active()) return;
       const link = `${location.origin}/#guest-ticket/${id}/${credentials.get(id)}`;
-      root.innerHTML = `<h2>我的訪客報名</h2><p>${registration.status === "registered" ? "報名成功" : registration.status === "cancelled" ? "報名已取消，原票券已失效。" : "本次報名未通過單位關鍵字規則。"}</p><p>不會自動寄信。請保存私人管理連結，遺失後不能只憑信箱取回。任何持有此連結的人都能查看或取消這筆報名，請勿轉傳。</p><button id="guest-save">下載私人管理連結</button> <a href="/api/v1/events/${id}/calendar">下載活動行事曆 .ics</a><div id="guest-qr"></div>${registration.status === "registered" ? '<button id="guest-cancel" class="secondary">取消我的報名</button>' : ""}<p role="status"></p>`;
+      root.innerHTML = `<h2>我的訪客報名</h2><p>${registration.status === "waitlisted" ? `${waitlistLabel(registration.waitlist_position)}。${WAITLIST_NOTE}` : registration.status === "registered" ? "報名成功" : registration.status === "cancelled" ? "報名已取消，原票券已失效。" : "本次報名未通過單位關鍵字規則。"}</p><p>不會自動寄信。請保存私人管理連結，遺失後不能只憑信箱取回。任何持有此連結的人都能查看或取消這筆報名，請勿轉傳。</p><button id="guest-save">下載私人管理連結</button> <a href="/api/v1/events/${id}/calendar">下載活動行事曆 .ics</a><div id="guest-qr"></div>${registration.status === "registered" || registration.status === "waitlisted" ? '<button id="guest-cancel" class="secondary">取消我的報名</button>' : ""}<p role="status"></p>`;
       root.querySelector<HTMLButtonElement>("#guest-save")!.onclick = () =>
         download("meetup-private-ticket.txt", link, "text/plain;charset=utf-8");
       const cancel = root.querySelector<HTMLButtonElement>("#guest-cancel");
@@ -164,7 +166,7 @@ export async function mountGuestRegistration(
       button.disabled = true;
       try {
         const data = await guestApi(id, "POST", payload, pending.get(id)!.key);
-        if (data.status !== "registered") {
+        if (data.status !== "registered" && data.status !== "waitlisted") {
           feedback(
             "很抱歉，本活動限服務單位包含「台大／臺大」的同仁報名。請確認單位填寫是否正確。",
           );
