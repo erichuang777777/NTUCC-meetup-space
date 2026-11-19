@@ -43,6 +43,14 @@ from = "/api/v1/spaces"
 to = "/.netlify/functions/spaces-api"
 status = 200
 [[redirects]]
+from = "/api/v1/talk-proposals/*"
+to = "/.netlify/functions/talk-proposals-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/talk-proposals"
+to = "/.netlify/functions/talk-proposals-api"
+status = 200
+[[redirects]]
 from = "/api/*"
 to = "/.netlify/functions/:splat"
 status = 200

@@ -7,3 +7,4 @@ import "./member_directory";
 import "./polls";
 import "./event_feedback";
 import "./content_reports";
+import "./talk_proposals";
