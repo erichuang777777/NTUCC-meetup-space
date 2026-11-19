@@ -12,6 +12,7 @@ import {
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
 import { LIST, upsertSpace, question, slides } from "./shared/spaces.js";
 import { guard } from "./shared/pii-guard.js";
+import { filterHidden } from "./shared/moderation.js";
 const uuid = z.string().uuid();
 async function staff(actor: { id: string; role: string }, session_id: string) {
   if (actor.role === "admin") return;
@@ -33,15 +34,21 @@ export default async (req: Request) => {
     const path = new URL(req.url).pathname;
     const tail = path.replace(/^.*\/(?:spaces-api|spaces)\/?/, "");
     if (req.method === "GET") {
-      requireScope((await authenticate(req))!, "projects:read");
+      const viewer = (await authenticate(req))!;
+      requireScope(viewer, "projects:read");
       if (!tail)
         return json(
-          checked(
-            await db()
-              .from("spaces")
-              .select(LIST)
-              .eq("visibility", "public")
-              .order("votes", { ascending: false }),
+          await filterHidden(
+            db(),
+            viewer.id,
+            "space",
+            checked(
+              await db()
+                .from("spaces")
+                .select(LIST)
+                .eq("visibility", "public")
+                .order("votes", { ascending: false }),
+            ),
           ),
         );
       const id = uuid.parse(tail.replace(/\/slides$/, ""));

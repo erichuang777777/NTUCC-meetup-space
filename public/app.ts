@@ -15,6 +15,7 @@ import {
   type FeatureCtx,
 } from "./feature-registry";
 import "./features/index";
+import { reportAttrs } from "./features/content_reports";
 const inviteFragment = location.hash.match(
   /^#invite=(ntucc_inv_[a-f0-9]{64})$/,
 );
@@ -635,7 +636,7 @@ function slotLabel(s: any) {
   return `${fmt(start)}–${fmt(start + 10)}`;
 }
 function card(s: any, i: number) {
-  return `<article class="card"><button class="project-cover project-open" data-open="${esc(s.id)}" aria-label="查看專案：${esc(s.title)}"><div class="cover-image"><img ${s.has_cover ? `data-space-cover="${esc(s.id)}"` : ""} src="${esc(coverFor(s, i))}" alt="${esc(s.title)}的專案封面" loading="lazy" width="800" height="520">${s.has_cover || s.cover_image ? "" : '<span class="cover-caption">示意圖</span>'}</div><div class="card-body"><h3>${esc(s.title)}</h3><div class="project-meta"><span>${s.category_tag === "踩坑避雷" ? "踩坑避雷" : "實戰展示"}</span><span>♡ ${s.votes}</span></div></div></button></article>`;
+  return `<article class="card"${reportAttrs("space", s.id, s.owner_id)}><button class="project-cover project-open" data-open="${esc(s.id)}" aria-label="查看專案：${esc(s.title)}"><div class="cover-image"><img ${s.has_cover ? `data-space-cover="${esc(s.id)}"` : ""} src="${esc(coverFor(s, i))}" alt="${esc(s.title)}的專案封面" loading="lazy" width="800" height="520">${s.has_cover || s.cover_image ? "" : '<span class="cover-caption">示意圖</span>'}</div><div class="card-body"><h3>${esc(s.title)}</h3><div class="project-meta"><span>${s.category_tag === "踩坑避雷" ? "踩坑避雷" : "實戰展示"}</span><span>♡ ${s.votes}</span></div></div></button></article>`;
 }
 async function openSpace(id: string, threadId?: string, push = true) {
   currentSpace =
@@ -839,7 +840,7 @@ async function loadQuestions(s: any) {
     qs
       .map(
         (q: any) =>
-          `<div class="list-item"><div class="row"><span class="muted">${esc(q.author_name)} ${q.is_resolved ? "· ✅ 已回答" : ""}</span><button class="secondary" data-qa-vote="${q.id}">↑ ${q.upvotes}</button></div><p>${esc(q.question_text)}</p>${q.speaker_reply ? `<p class="sub">講者：${esc(q.speaker_reply)}</p>` : ""}${s.owner_id === user?.id && !q.is_resolved ? `<button data-resolve="${q.id}" class="ghost">標記已回答</button>` : ""}</div>`,
+          `<div class="list-item"${reportAttrs("qa", q.id)}><div class="row"><span class="muted">${esc(q.author_name)} ${q.is_resolved ? "· ✅ 已回答" : ""}</span><button class="secondary" data-qa-vote="${q.id}">↑ ${q.upvotes}</button></div><p>${esc(q.question_text)}</p>${q.speaker_reply ? `<p class="sub">講者：${esc(q.speaker_reply)}</p>` : ""}${s.owner_id === user?.id && !q.is_resolved ? `<button data-resolve="${q.id}" class="ghost">標記已回答</button>` : ""}</div>`,
       )
       .join("") || '<p class="sub">第一個好問題，從你開始。</p>';
   document.querySelectorAll<HTMLElement>("[data-qa-vote]").forEach(
@@ -1127,7 +1128,7 @@ function painView() {
       "這個困擾，你也有嗎？",
       "記錄那些重複、耗時的小事。你的日常痛點，也許就是下一個改善的起點。",
     ) +
-    `<div class="row"><input id="pain-search" class="search" placeholder="搜尋痛點或科別…" value="${esc(search)}"><button id="add-pain">＋ 痛點</button></div>${list.map((p) => `<article class="pain-item"><div class="row"><div><h3>${esc(p.title)}</h3><span class="muted">${esc(p.department || "跨職類")}</span></div><button data-pain-vote="${p.id}" class="text-button" aria-label="我也有這個困擾">＋ ${p.upvotes}</button></div><details><summary>內容</summary><p class="detail-summary">${esc(p.scenario)}</p><p class="sub">${esc(p.time_cost || "")}<br>${esc(p.ideal_outcome || "")}</p></details></article>`).join("") || '<div class="empty">目前沒有痛點</div>'}`;
+    `<div class="row"><input id="pain-search" class="search" placeholder="搜尋痛點或科別…" value="${esc(search)}"><button id="add-pain">＋ 痛點</button></div>${list.map((p) => `<article class="pain-item"${reportAttrs("pain_point", p.id, p.proposer_id)}><div class="row"><div><h3>${esc(p.title)}</h3><span class="muted">${esc(p.department || "跨職類")}</span></div><button data-pain-vote="${p.id}" class="text-button" aria-label="我也有這個困擾">＋ ${p.upvotes}</button></div><details><summary>內容</summary><p class="detail-summary">${esc(p.scenario)}</p><p class="sub">${esc(p.time_cost || "")}<br>${esc(p.ideal_outcome || "")}</p></details></article>`).join("") || '<div class="empty">目前沒有痛點</div>'}`;
   $("#add-pain").onclick = () => {
     if (requireMember()) painForm();
   };

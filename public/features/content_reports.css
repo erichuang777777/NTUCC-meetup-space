@@ -1,0 +1,23 @@
+.report-btn {
+  font-size: 0.8rem;
+  padding: 2px 8px;
+  margin-top: 6px;
+}
+.report-hidden {
+  margin-right: 6px;
+}
+.report-dialog .report-form {
+  display: grid;
+  gap: 12px;
+  min-width: min(420px, 80vw);
+}
+.report-dialog textarea {
+  width: 100%;
+}
+.report-preview {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid currentColor;
+  opacity: 0.85;
+  white-space: pre-wrap;
+}
