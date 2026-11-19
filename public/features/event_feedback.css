@@ -1,0 +1,58 @@
+.fb-holder {
+  margin-top: 12px;
+}
+.fb-fields {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.fb-q {
+  display: block;
+  margin: 10px 0;
+  border: 0;
+  padding: 0;
+}
+.fb-q .row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.fb-q .row input[data-f="label"] {
+  flex: 1 1 200px;
+}
+.fb-q textarea {
+  width: 100%;
+  margin-top: 6px;
+}
+.fb-check {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.fb-stars {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.fb-opt {
+  display: block;
+  margin: 4px 0;
+}
+.fb-req {
+  color: #b3261e;
+  font-size: 0.85em;
+}
+.fb-sq {
+  margin: 14px 0;
+}
+.fb-dist {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.9em;
+}
+.fb-sq ul {
+  margin: 6px 0 0 1.2em;
+  padding: 0;
+}

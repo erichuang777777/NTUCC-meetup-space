@@ -5,3 +5,4 @@ export {};
 import "./notifications";
 import "./member_directory";
 import "./polls";
+import "./event_feedback";
