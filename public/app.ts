@@ -1698,7 +1698,8 @@ window.addEventListener("popstate", () => {
   else if (profile?.passcode_verified || demoEntered) {
     page =
       navs.some((n) => n[0] === location.hash.slice(1)) ||
-      featureNavs().some((n) => n.id === location.hash.slice(1))
+      featureNavs().some((n) => n.id === location.hash.slice(1)) ||
+      featureForPage(location.hash.slice(1))
         ? location.hash.slice(1)
         : "announcements";
     render();

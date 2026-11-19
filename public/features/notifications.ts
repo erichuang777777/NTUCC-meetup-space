@@ -8,6 +8,9 @@ export const NOTIFICATION_TYPES: { type: string; label: string }[] = [
   { type: "discussion_reply", label: "討論串有新回覆" },
   { type: "registration_review", label: "報名審核結果" },
   { type: "event_reminder", label: "活動前提醒" },
+  { type: "event_feedback", label: "會後問卷開放" },
+  { type: "report_handled", label: "檢舉處理結果" },
+  { type: "content_hidden", label: "內容被隱藏" },
 ];
 
 type Row = {
