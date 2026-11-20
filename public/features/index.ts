@@ -13,3 +13,4 @@ import "./event_waitlist";
 import "./talk_proposals";
 import "./member_hosted_events";
 import "./participation_history";
+import "./global_search";
