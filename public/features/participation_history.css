@@ -1,0 +1,55 @@
+.ph-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.ph-tile {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.ph-tile b {
+  display: block;
+  font-size: 1.5rem;
+}
+.ph-month {
+  margin: 18px 0 6px;
+  font-size: 1rem;
+}
+.ph-item {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.ph-icon {
+  width: 1.5em;
+  text-align: center;
+}
+.ph-status {
+  font-size: 0.8125rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: #eef1f4;
+  white-space: nowrap;
+}
+.ph-badge {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: #555;
+  flex-wrap: wrap;
+}
+.ph-toggle {
+  display: block;
+  background: #fff8e1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 12px 0;
+}
+.ph-toggle small {
+  display: block;
+}
