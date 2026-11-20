@@ -12,3 +12,4 @@ import "./forum_plus";
 import "./event_waitlist";
 import "./talk_proposals";
 import "./member_hosted_events";
+import "./global_search";
