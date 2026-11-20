@@ -71,10 +71,11 @@ const backend = createServer(async (req, res) => {
     else if (url.pathname.startsWith("/rest/v1/rpc/")) {
       const fn = url.pathname.split("/").pop()!;
       const allowed = [
-        "submit_event_application",
-        "register_guest_event",
+        "submit_event_application_details",
+        "register_guest_event_details",
         "access_guest_event",
         "consume_guest_quota",
+        "update_event_registration",
         "event_ticket",
         "check_in_public_event",
       ];
@@ -147,6 +148,14 @@ try {
   assert.equal(ticketResponse.status, 200);
   const ticket = await ticketResponse.json();
   assert.match(ticket.token, /^ntucc_ticket_[a-f0-9]{64}$/);
+  const editResponse=await call(mode === "guest" ? "/guest-registration" : "/registration", "PATCH",{
+    name:"更正後姓名", organization:"臺大醫院測試單位",contact_email:`${mode}@example.test`,meal_preference:"素食",
+  },credential);
+  assert.equal(editResponse.status,200);
+  const editedTicket=await (await call(mode === "guest" ? "/guest-ticket" : "/ticket","GET",undefined,credential)).json();
+  assert.equal(editedTicket.token,ticket.token);
+  const editedRow=read(`select applicant_name,meal_preference from event_registrations where event_id='${E}' and status='registered'`)[0];
+  assert.equal(editedRow.applicant_name,"更正後姓名");assert.equal(editedRow.meal_preference,"素食");
   const matrix = new QRCodeWriter().encode(
       ticket.token,
       BarcodeFormat.QR_CODE,

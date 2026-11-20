@@ -1,3 +1,4 @@
+import { mealField, editRegistrationFields } from "./registration-fields";
 import {
   captureGuestLink,
   hasGuestTicket,
@@ -142,6 +143,12 @@ export function mountPublicEvents(client: SupabaseClient | null) {
             TICKET_UNAVAILABLE: "目前無法取得票券，請確認仍已報名且活動開放。",
             EMAIL_NOT_VERIFIED: "請先驗證電子郵件。",
             EVENT_FULL: "本活動已額滿。",
+            REGISTRATION_CONFLICT:
+              "無法新增此報名，請使用原私人管理連結或聯絡主辦人確認，勿重複報名。",
+            REGISTRATION_NOT_ACTIVE: "這筆報名已失效，無法修改。",
+            REGISTRATION_ALREADY_CHECKED_IN: "已報到的資料請聯絡主辦人修改。",
+            INVALID_REGISTRATION_IDENTITY: "找不到你的有效報名。",
+            ORGANIZATION_NOT_ELIGIBLE: "服務單位需包含台大或臺大。",
             REGISTRATION_CLOSED: "本活動報名已截止。",
             EVENT_CANCELLED: "本活動已取消。",
             NOT_FOUND: "此活動不存在或尚未公開。",
@@ -380,7 +387,28 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           const pages = Math.max(1, Math.ceil(roster.total / roster.page_size));
           const pageLink = (page: number) =>
             `#event-admin/${eventId}?page=${page}`;
-          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p>活動識別碼：<code class="public-roster-id">${esc(eventId)}</code></p><p>已報名 <strong>${esc(roster.registered)}</strong> 人 · 已取消 <strong>${esc(roster.cancelled)}</strong> 人 · 待補資料 ${esc(roster.pending ?? 0)} 人 · 未核可 ${esc(roster.rejected ?? 0)} 人${roster.waitlisted !== undefined ? ` · 候補 ${esc(roster.waitlisted)} 人` : ""} · 共 ${esc(roster.total)} 筆</p><p>僅供管理員辦理活動聯繫與報到使用，請勿公開或轉傳名單。姓名、服務單位及聯絡信箱由報名者自行填寫。單位包含「台大」即通過輕量關鍵字判定，並非身分證明，聯絡信箱不另行驗證。舊會員活動與餐盒資料不包含在內。</p>${roster.registrations.length ? `<div class="public-roster-scroll" role="region" aria-label="報名名單" tabindex="0"><table class="public-roster"><thead><tr><th scope="col">報名識別碼</th><th scope="col">報名者</th><th scope="col">資格判定</th><th scope="col">狀態</th><th scope="col">最後更新（台北）</th></tr></thead><tbody>${roster.registrations.map((r: { id: string; user_id: string; status: string; updated_at: string; display_name?: string | null; email?: string | null; applicant_name?: string | null; organization?: string; contact_email?: string; eligibility_status?: string; review_reason?: string; waitlist_position?: number | null }) => `<tr><td><code>${esc(r.id)}</code></td><td>${esc(registrationName(r))}<br>${esc(r.organization || "未填單位")}<br>${esc(r.contact_email || r.email || "未填信箱")}</td><td>${esc(({ approved: "符合關鍵字", rejected: "未符合關鍵字", pending: "待補資料" } as Record<string, string>)[r.eligibility_status || "pending"] || "未知")}</td><td>${esc(({ registered: "已報名", cancelled: "已取消", pending: "待補資料", rejected: "未核可" } as Record<string, string>)[r.status] || (r.status === "waitlisted" ? waitlistLabel(r.waitlist_position) : "未知狀態"))}</td><td>${esc(date(r.updated_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>本頁沒有報名紀錄。</p>"}<nav class="public-roster-pages" aria-label="報名名單分頁">${roster.page > 1 ? `<a href="${esc(pageLink(roster.page - 1))}">上一頁</a>` : ""}<span>第 ${esc(roster.page)} 頁，共 ${esc(pages)} 頁（每頁 ${esc(roster.page_size)} 筆）</span>${roster.page < pages ? `<a href="${esc(pageLink(roster.page + 1))}">下一頁</a>` : ""}</nav>`;
+          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p>活動識別碼：<code class="public-roster-id">${esc(eventId)}</code></p><p>已報名 <strong>${esc(roster.registered)}</strong> 人 · 已取消 <strong>${esc(roster.cancelled)}</strong> 人 · 待補資料 ${esc(roster.pending ?? 0)} 人 · 未核可 ${esc(roster.rejected ?? 0)} 人 · 共 ${esc(roster.total)} 筆</p>${roster.summary ? `<p>已報到 ${esc(roster.summary.checked_in)} 人 · 訪客 ${esc(roster.summary.guest)} 人 · 登入報名 ${esc(roster.summary.member)} 人</p><p>葷食 ${esc(roster.summary.meals["葷食"])} · 素食 ${esc(roster.summary.meals["素食"])} · 不需餐盒 ${esc(roster.summary.meals["不需餐盒"])}</p>${roster.summary.duplicate_emails ? `<p role="status">有 ${esc(roster.summary.duplicate_emails)} 組既有重複信箱，請核對名單；系統保留原紀錄，未自動取消。</p>` : ""}` : ""}<button id="roster-export" class="secondary">匯出已報名名單 CSV</button><p>僅供管理員辦理活動聯繫與報到使用，請勿公開或轉傳名單。姓名、服務單位及聯絡信箱由報名者自行填寫。單位包含「台大」即通過輕量關鍵字判定，並非身分證明，聯絡信箱不另行驗證。舊會員活動與餐盒資料不包含在內。</p>${roster.registrations.length ? `<div class="public-roster-scroll" role="region" aria-label="報名名單" tabindex="0"><table class="public-roster"><thead><tr><th scope="col">報名識別碼</th><th scope="col">報名者</th><th scope="col">資格判定</th><th scope="col">狀態</th><th scope="col">最後更新（台北）</th></tr></thead><tbody>${roster.registrations.map((r: { id: string; user_id: string; status: string; updated_at: string; display_name?: string | null; email?: string | null; applicant_name?: string | null; organization?: string; contact_email?: string; eligibility_status?: string; review_reason?: string; meal_preference?: string }) => `<tr><td><code>${esc(r.id)}</code></td><td>${esc(registrationName(r))}<br>${esc(r.organization || "未填單位")}<br>${esc(r.contact_email || r.email || "未填信箱")}<br>${esc(r.meal_preference || "不需餐盒")}</td><td>${esc(({ approved: "符合關鍵字", rejected: "未符合關鍵字", pending: "待補資料" } as Record<string, string>)[r.eligibility_status || "pending"] || "未知")}</td><td>${esc(({ registered: "已報名", cancelled: "已取消", pending: "待補資料", rejected: "未核可" } as Record<string, string>)[r.status] || "未知狀態")}</td><td>${esc(date(r.updated_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>本頁沒有報名紀錄。</p>"}<nav class="public-roster-pages" aria-label="報名名單分頁">${roster.page > 1 ? `<a href="${esc(pageLink(roster.page - 1))}">上一頁</a>` : ""}<span>第 ${esc(roster.page)} 頁，共 ${esc(pages)} 頁（每頁 ${esc(roster.page_size)} 筆）</span>${roster.page < pages ? `<a href="${esc(pageLink(roster.page + 1))}">下一頁</a>` : ""}</nav>`;
+          const exportButton =
+            content.querySelector<HTMLButtonElement>("#roster-export")!;
+          action(exportButton, async () => {
+            const current = (await client!.auth.getSession()).data.session;
+            const response = await fetch(
+              `/api/v1/events/manage/${eventId}?export=registered`,
+              {
+                cache: "no-store",
+                headers: { Authorization: `Bearer ${current?.access_token}` },
+              },
+            );
+            if (!response.ok) throw Error("匯出失敗，請確認管理員身分後重試。");
+            const blob = await response.blob();
+            if (!active()) return;
+            const url = URL.createObjectURL(blob),
+              a = document.createElement("a");
+            a.href = url;
+            a.download = "meetup-registrations.csv";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          });
         } catch (error) {
           if (!active()) return;
           content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p role="alert">${esc(error instanceof Error ? error.message : "無法載入名單")}</p><button id="roster-retry">重試</button>`;
@@ -596,7 +624,14 @@ export function mountPublicEvents(client: SupabaseClient | null) {
         const closed =
           e.status === "cancelled" ||
           Date.now() >= Date.parse(e.registration_closes_at);
-        content.innerHTML = `<a href="#events">← 返回活動</a><article class="public-event-detail"><h1>${esc(e.title)}</h1><p>${esc(date(e.starts_at))} 至 ${esc(date(e.ends_at))}（台北）</p><p>${esc(e.location)}</p><p class="public-prose">${esc(e.description)}</p>${e.agenda?.length ? `<section class="public-agenda"><h2>活動議程</h2><ol>${e.agenda.map((item) => `<li><strong>${esc(item.time)}</strong><span>${esc(item.title)}${item.speaker ? `<small>講者：${esc(item.speaker)}</small>` : ""}</span></li>`).join("")}</ol></section>` : ""}<p><a href="#event-photo/${esc(e.id)}">製作本機活動相框</a></p><p>名額 ${esc(e.capacity)} 人 · 報名截止 ${esc(date(e.registration_closes_at))}</p>${e.status === "cancelled" ? '<p class="error">活動已取消</p>' : ""}<section id="event-registration" aria-live="polite">正在讀取報名狀態…</section><section><h2>加入行事曆</h2><p>加入行事曆不代表報名完成，也不會自動同步改期或取消。請以本站活動狀態為準。</p><div class="actions"><a href="/api/v1/events/${esc(e.id)}/calendar">下載 .ics</a><a href="${esc(calendarLinks(e).google)}" target="_blank" rel="noopener noreferrer">Google 行事曆</a><a href="${esc(calendarLinks(e).outlook)}" target="_blank" rel="noopener noreferrer">Outlook</a></div></section><section id="event-public-gallery"></section></article>`;
+        content.innerHTML = `<a href="#events">← 返回活動</a><article class="public-event-detail"><h1>${esc(e.title)}</h1><p>${esc(date(e.starts_at))} 至 ${esc(date(e.ends_at))}（台北）</p><p>${esc(e.location)}</p><p class="public-prose">${esc(e.description)}</p>${e.agenda?.length ? `<section class="public-agenda"><h2>活動議程</h2><ol>${e.agenda.map((item) => `<li><strong>${esc(item.time)}</strong><span>${esc(item.title)}${item.speaker ? `<small>講者：${esc(item.speaker)}</small>` : ""}</span></li>`).join("")}</ol></section>` : ""}<p><a href="#event-photo/${esc(e.id)}">製作本機活動相框</a></p><p id="event-availability">名額 ${esc(e.capacity)} 人</p><p>報名截止 ${esc(date(e.registration_closes_at))}</p>${e.status === "cancelled" ? '<p class="error">活動已取消</p>' : ""}<section id="event-registration" aria-live="polite">正在讀取報名狀態…</section><section><h2>加入行事曆</h2><p>加入行事曆不代表報名完成，也不會自動同步改期或取消。請以本站活動狀態為準。</p><div class="actions"><a href="/api/v1/events/${esc(e.id)}/calendar">下載 .ics</a><a href="${esc(calendarLinks(e).google)}" target="_blank" rel="noopener noreferrer">Google 行事曆</a><a href="${esc(calendarLinks(e).outlook)}" target="_blank" rel="noopener noreferrer">Outlook</a></div></section><section id="event-public-gallery"></section></article>`;
+        void api(`/${e.id}/availability`)
+          .then((counts) => {
+            if (active())
+              content.querySelector("#event-availability")!.textContent =
+                `已報名 ${counts.registered} 人 · 剩餘 ${counts.remaining} 位`;
+          })
+          .catch(() => {});
         disposePhoto = mountPublicPhotoGallery(
           content.querySelector<HTMLElement>("#event-public-gallery")!,
           e.id,
@@ -620,12 +655,35 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           const rejected = registration?.status === "rejected";
           const waitlisted = registration?.status === "waitlisted";
           const section = content.querySelector("#event-registration")!;
-          section.innerHTML = waitlisted
-            ? `<p><strong>${esc(waitlistLabel(registration.waitlist_position))}</strong></p><p>${WAITLIST_NOTE}</p><button id="event-register" class="secondary">取消候補</button>`
-            : registered
-              ? '<p>你已報名成功。</p><button id="event-register" class="secondary">取消我的報名</button>'
-              : `${rejected ? "<p>很抱歉，本活動目前開放服務單位名稱包含「台大」的參與者。你填寫的單位未符合本次規則，若填寫有誤，可更正後重新送出。</p>" : needsDetails ? "<p>原報名名額已保留。請補齊姓名、服務單位與聯絡信箱即可取得 QR，不需取消重報；即使報名已截止仍可補齊。若填寫單位不符合規則，報名將不受理並釋出名額。</p>" : registration?.status === "pending" ? "<p>請補齊姓名、服務單位與聯絡信箱後完成報名，補齊前不提供報到 QR。</p>" : ""}${closed && !(needsDetails && e.status !== "cancelled") ? "<p>目前不開放報名。</p>" : `<form id="event-application" class="public-editor"><h2>活動報名</h2><p>請填寫真實資料。服務單位包含「台大」即通過本次輕量關鍵字判定，這不等同身分或任職證明。姓名、單位與聯絡信箱僅提供主辦方活動聯繫使用，不公開。</p><label>姓名<input name="name" required maxlength="100" value="${esc(registration?.applicant_name ?? "")}"></label><label>服務單位<input name="organization" required maxlength="200" value="${esc(registration?.organization ?? "")}"></label><label>聯絡信箱<input name="contact_email" type="email" required maxlength="254" value="${esc(registration?.contact_email ?? session.user.email ?? "")}"></label><p>可填個人信箱，不需與登入信箱一致；請確認可收信，本版不另外驗證聯絡信箱。</p><button id="event-register" type="submit">確認報名</button></form>`}`;
+          section.innerHTML = registered
+            ? '<p>你已報名成功。</p><button id="event-register" class="secondary">取消我的報名</button>'
+            : `${rejected ? "<p>很抱歉，本活動目前開放服務單位名稱包含「台大」的參與者。你填寫的單位未符合本次規則，若填寫有誤，可更正後重新送出。</p>" : needsDetails ? "<p>原報名名額已保留。請補齊姓名、服務單位與聯絡信箱即可取得 QR，不需取消重報；即使報名已截止仍可補齊。若填寫單位不符合規則，報名將不受理並釋出名額。</p>" : registration?.status === "pending" ? "<p>請補齊姓名、服務單位與聯絡信箱後完成報名，補齊前不提供報到 QR。</p>" : ""}${closed && !(needsDetails && e.status !== "cancelled") ? "<p>目前不開放報名。</p>" : `<form id="event-application" class="public-editor"><h2>活動報名</h2><p>請填寫真實資料。服務單位包含「台大」即通過本次輕量關鍵字判定，這不等同身分或任職證明。姓名、單位與聯絡信箱僅提供主辦方活動聯繫使用，不公開。</p><label>姓名<input name="name" required maxlength="100" value="${esc(registration?.applicant_name ?? "")}"></label><label>服務單位<input name="organization" required maxlength="200" value="${esc(registration?.organization ?? "")}"></label><label>聯絡信箱<input name="contact_email" type="email" required maxlength="254" value="${esc(registration?.contact_email ?? session.user.email ?? "")}"></label><p>可填個人信箱，不需與登入信箱一致；請確認可收信，本版不另外驗證聯絡信箱。</p>${mealField(registration?.meal_preference)}<button id="event-register" type="submit">確認報名</button></form>`}`;
           if (registered) {
+            if (!closed && !registration.checked_in_at) {
+              const editBox = document.createElement("details");
+              editBox.innerHTML = `<summary>修改報名資料</summary><form class="public-editor">${editRegistrationFields(registration)}<button>儲存修改</button><p role="status"></p></form>`;
+              section.append(editBox);
+              const form = editBox.querySelector("form")!;
+              form.onsubmit = async (event) => {
+                event.preventDefault();
+                const button = form.querySelector("button")!;
+                if (button.disabled || !form.reportValidity()) return;
+                button.disabled = true;
+                try {
+                  await api(
+                    `/${e.id}/registration`,
+                    "PATCH",
+                    Object.fromEntries(new FormData(form)),
+                  );
+                  if (active()) await render();
+                } catch (error) {
+                  form.querySelector('[role="status"]')!.textContent =
+                    error instanceof Error ? error.message : "修改失敗";
+                } finally {
+                  if (button.isConnected) button.disabled = false;
+                }
+              };
+            }
             const ticketBox = document.createElement("div");
             ticketBox.className = "public-ticket";
             ticketBox.innerHTML = "<h2>我的報到票券</h2><p>正在載入…</p>";

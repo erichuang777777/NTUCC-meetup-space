@@ -168,3 +168,10 @@ Sites／本機示例中的論壇新增與回覆僅保留在當次頁面預覽的
 這裡新增的是網站成員資格，**不會建立 Google 帳號**。對方須已有 Google 帳號。若 Google OAuth 應用程式仍處於 Testing，仍需到 Google Cloud 加入測試使用者，或完成正式發布；網站邀請不能繞過 Google 的限制。
 
 Netlify 的 `APP_ORIGIN` 請設為正式網站 origin，例如 `https://YOUR_SITE.netlify.app`，讓邀請連結指向正確網站。邀請明文只在建立時顯示，資料庫僅存 SHA-256；請把連結視為秘密，勿貼到公開討論區。成員角色異動、邀請建立／撤銷／接受均會留下稽核紀錄。管理 API 僅接受互動式管理員登入，不接受個人 Agent Token。
+
+
+## 公開活動免登入報名補完（029）
+
+首頁公開活動可直接分享活動連結，不需 Google 登入或院內通關。報名者選擇餐盒需求，保存私人管理連結即可在截止前修改資料或取消；不會因此取得院內分享或討論權限。公開頁只顯示已報名與剩餘人數。管理員在公開活動的「報名管理」查看訪客／登入報名、報到、餐盒統計及 CSV 匯出。
+
+部署前執行 [029_registration_completion.sql](supabase/migrations/029_registration_completion.sql)，前提為已完成遠端 main 現有 migrations。020–021、023–028 為計劃預留編號，尚無檔案者不需執行。本次無新增環境變數。詳細 API、私人連結與重複報名處理見 [PUBLIC_EVENTS.md](PUBLIC_EVENTS.md#complete-public-registration-029)。這些統計合併同一公開活動的訪客與登入報名，不會自動合併舊版院內場次報名。
