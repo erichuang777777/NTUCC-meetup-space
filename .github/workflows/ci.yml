@@ -78,5 +78,8 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/forum_plus.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/022_event_series.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_series.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/029_registration_completion.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/registration-completion.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/registration-completion-concurrency.sh
           PGHOST=localhost PGUSER=postgres PGDATABASE=postgres node --import tsx tests/event-http-e2e.ts
       - run: npm audit --audit-level=high

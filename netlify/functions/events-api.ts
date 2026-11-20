@@ -1,3 +1,4 @@
+import { registrationCsv } from "./shared/registration-csv.js";
 import { z } from "zod";
 import { ticketQr } from "./shared/ticket-qr.js";
 import { randomBytes } from "node:crypto";
@@ -15,6 +16,17 @@ const eventFields =
   "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence,checkin_opens_at,checkin_closes_at,agenda";
 const announcementFields = "id,title,content,created_at";
 const uuid = z.string().uuid();
+const applicationSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    organization: z.string().trim().min(1).max(200),
+    contact_email: z
+      .email()
+      .max(254)
+      .transform((s) => s.toLowerCase()),
+    meal_preference: z.enum(["葷食", "素食", "不需餐盒"]).default("不需餐盒"),
+  })
+  .strict();
 const eventSchema = z
   .object({
     id: uuid.optional(),
@@ -193,6 +205,19 @@ export default async function handler(req: Request, context?: { ip?: string }) {
             .maybeSingle(),
         );
         if (!event) throw new HttpError(404, "NOT_FOUND");
+        if (params.get("export") === "registered") {
+          const rows = checked(
+            await client.rpc("event_registration_export", { p_event: child }),
+          );
+          return new Response(registrationCsv(rows ?? []), {
+            headers: {
+              "Content-Type": "text/csv; charset=utf-8",
+              "Content-Disposition":
+                'attachment; filename="meetup-registrations.csv"',
+              "Cache-Control": "no-store",
+            },
+          });
+        }
         const counts = await Promise.all(
           ["registered", "cancelled", "pending", "rejected"].map((status) =>
             client
@@ -208,7 +233,7 @@ export default async function handler(req: Request, context?: { ip?: string }) {
             await client
               .from("event_registrations")
               .select(
-                "id,user_id,status,updated_at,checked_in_at,applicant_name,organization,contact_email,eligibility_status,review_reason",
+                "id,user_id,status,updated_at,checked_in_at,applicant_name,organization,contact_email,eligibility_status,review_reason,meal_preference",
               )
               .eq("event_id", child)
               .order("updated_at", { ascending: false })
@@ -220,10 +245,7 @@ export default async function handler(req: Request, context?: { ip?: string }) {
               await client
                 .from("profiles")
                 .select("id,display_name,email")
-                .in(
-                  "id",
-                  rows.map((r) => r.user_id).filter(Boolean),
-                ),
+                .in("id", rows.map((r) => r.user_id).filter(Boolean)),
             ) ?? [])
           : [];
         const byId = new Map(profiles.map((p) => [p.id, p]));
@@ -240,6 +262,9 @@ export default async function handler(req: Request, context?: { ip?: string }) {
           total: counts.reduce((n, c) => n + (c.count ?? 0), 0),
           page,
           page_size: 50,
+          summary: checked(
+            await client.rpc("event_registration_summary", { p_event: child }),
+          ),
         });
       }
       if (req.method === "GET")
@@ -397,57 +422,120 @@ export default async function handler(req: Request, context?: { ip?: string }) {
       // Netlify context.ip is platform supplied. Never trust X-Forwarded-For.
       const ip = context?.ip ?? "local-unknown";
       const guestQuota = async (scope: string, limit: number) => {
-        const allowed = checked(await client.rpc("consume_guest_quota", {
-          p_key: hashToken(scope), p_limit: limit,
-        }));
+        const allowed = checked(
+          await client.rpc("consume_guest_quota", {
+            p_key: hashToken(scope),
+            p_limit: limit,
+          }),
+        );
         if (!allowed) throw new HttpError(429, "RATE_LIMITED");
       };
       let token: string;
       let result;
       if (child === "guest-registration" && req.method === "POST") {
         await guestQuota(`guest-create:${ip}`, 120);
-        const input = z.object({
-          name: z.string().trim().min(1).max(100),
-          organization: z.string().trim().min(1).max(200),
-          contact_email: z.email().max(254),
-        }).strict().parse(await body(req));
+        const input = applicationSchema.parse(await body(req));
         const key = req.headers.get("Idempotency-Key");
-        if (key && !/^[a-f0-9]{64}$/.test(key)) throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY");
+        if (key && !/^[a-f0-9]{64}$/.test(key))
+          throw new HttpError(400, "INVALID_IDEMPOTENCY_KEY");
         token = "ntucc_guest_" + (key ?? randomBytes(32).toString("hex"));
-        result = await client.rpc("register_guest_event", {
-          p_event: id, p_hash: hashToken(token), p_name: input.name,
-          p_organization: input.organization, p_email: input.contact_email,
+        result = await client.rpc("register_guest_event_details", {
+          p_event: id,
+          p_hash: hashToken(token),
+          p_name: input.name,
+          p_organization: input.organization,
+          p_email: input.contact_email,
+          p_meal: input.meal_preference,
           p_ticket: "ntucc_ticket_" + randomBytes(32).toString("hex"),
         });
       } else {
-        if (!(req.method === "GET" || (child === "guest-registration" && req.method === "DELETE")))
+        if (!(
+          req.method === "GET" ||
+          (child === "guest-registration" &&
+            ["DELETE", "PATCH"].includes(req.method))
+        ))
           throw new HttpError(405, "METHOD_NOT_ALLOWED");
-        token = req.headers.get("authorization")?.match(/^Bearer (ntucc_guest_[a-f0-9]{64})$/i)?.[1] ?? "";
+        token =
+          req.headers
+            .get("authorization")
+            ?.match(/^Bearer (ntucc_guest_[a-f0-9]{64})$/i)?.[1] ?? "";
         if (!token) throw new HttpError(401, "GUEST_TOKEN_REQUIRED");
         result = await client.rpc("access_guest_event", {
-          p_event: id, p_hash: hashToken(token), p_cancel: false,
+          p_event: id,
+          p_hash: hashToken(token),
+          p_cancel: false,
         });
         // Validate first: arbitrary guessed tokens must not create quota rows.
         // Shared hospital NAT and exhausted creation quota cannot lock out tickets.
         if (!result.error) {
-          const action = req.method === "DELETE" ? "cancel" : "read";
-          await guestQuota(`guest-${action}:${id}:${hashToken(token)}`, action === "cancel" ? 30 : 120);
-          if (action === "cancel") result = await client.rpc("access_guest_event", {
-            p_event: id, p_hash: hashToken(token), p_cancel: true,
-          });
+          const action =
+            req.method === "DELETE"
+              ? "cancel"
+              : req.method === "PATCH"
+                ? "update"
+                : "read";
+          await guestQuota(
+            `guest-${action}:${id}:${hashToken(token)}`,
+            action === "cancel" ? 30 : 120,
+          );
+          if (action === "update") {
+            const input = applicationSchema.parse(await body(req));
+            result = await client.rpc("update_event_registration", {
+              p_event: id,
+              p_user: null,
+              p_hash: hashToken(token),
+              p_name: input.name,
+              p_organization: input.organization,
+              p_email: input.contact_email,
+              p_meal: input.meal_preference,
+            });
+          }
+          if (action === "cancel")
+            result = await client.rpc("access_guest_event", {
+              p_event: id,
+              p_hash: hashToken(token),
+              p_cancel: true,
+            });
         }
       }
       if (result.error) {
-        const code = ["EVENT_NOT_FOUND", "EVENT_CANCELLED", "INVALID_APPLICATION", "IDEMPOTENCY_CONFLICT", "GUEST_ACCESS_EXPIRED", "ORGANIZATION_NOT_ELIGIBLE", "REGISTRATION_CLOSED", "EVENT_FULL", "INVALID_GUEST_TOKEN"].find(c => result.error.message.includes(c));
-        if (code) throw new HttpError(code === "INVALID_GUEST_TOKEN" ? 401 : code === "EVENT_NOT_FOUND" ? 404 : 409, code);
+        const code = [
+          "EVENT_NOT_FOUND",
+          "EVENT_CANCELLED",
+          "INVALID_APPLICATION",
+          "IDEMPOTENCY_CONFLICT",
+          "GUEST_ACCESS_EXPIRED",
+          "ORGANIZATION_NOT_ELIGIBLE",
+          "REGISTRATION_CLOSED",
+          "EVENT_FULL",
+          "INVALID_GUEST_TOKEN",
+          "REGISTRATION_CONFLICT",
+          "REGISTRATION_NOT_ACTIVE",
+          "REGISTRATION_ALREADY_CHECKED_IN",
+          "INVALID_REGISTRATION_IDENTITY",
+        ].find((c) => result.error.message.includes(c));
+        if (code)
+          throw new HttpError(
+            code === "INVALID_GUEST_TOKEN"
+              ? 401
+              : code === "EVENT_NOT_FOUND"
+                ? 404
+                : 409,
+            code,
+          );
       }
       const data = checked(result);
-      if (data.ticket?.token) data.ticket = { ...data.ticket, ...ticketQr(data.ticket.token) };
+      if (data.ticket?.token)
+        data.ticket = { ...data.ticket, ...ticketQr(data.ticket.token) };
       if (child === "guest-ticket") {
         if (!data.ticket) throw new HttpError(404, "TICKET_UNAVAILABLE");
         return json(data.ticket);
       }
-      return json({ ...data, ...(req.method === "POST" ? { management_token: token } : {}), calendar_url: `/api/v1/events/${id}/calendar` });
+      return json({
+        ...data,
+        ...(req.method === "POST" ? { management_token: token } : {}),
+        calendar_url: `/api/v1/events/${id}/calendar`,
+      });
     }
     if (child === "ticket") {
       if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
@@ -494,35 +582,40 @@ export default async function handler(req: Request, context?: { ip?: string }) {
             await client
               .from("event_registrations")
               .select(
-                "id,status,applicant_name,organization,contact_email,eligibility_status,review_reason",
+                "id,status,applicant_name,organization,contact_email,eligibility_status,review_reason,meal_preference,checked_in_at",
               )
               .eq("event_id", id)
               .eq("user_id", user)
               .maybeSingle(),
           ),
         );
-      if (!["POST", "DELETE"].includes(req.method))
+      if (!["POST", "DELETE", "PATCH"].includes(req.method))
         throw new HttpError(405, "METHOD_NOT_ALLOWED");
       const input =
-        req.method === "POST"
-          ? z
-              .object({
-                name: z.string().trim().min(1).max(100),
-                organization: z.string().trim().min(1).max(200),
-                contact_email: z.email().max(254),
-              })
-              .strict()
-              .parse(await body(req))
+        req.method !== "DELETE"
+          ? applicationSchema.parse(await body(req))
           : null;
       await limited(user, "event_registration", 30);
-      const r = await client.rpc("submit_event_application", {
-        p_user: user,
-        p_event: id,
-        p_name: input?.name ?? "",
-        p_organization: input?.organization ?? "",
-        p_email: input?.contact_email ?? "",
-        p_cancel: req.method === "DELETE",
-      });
+      const r =
+        req.method === "PATCH"
+          ? await client.rpc("update_event_registration", {
+              p_user: user,
+              p_event: id,
+              p_hash: null,
+              p_name: input!.name,
+              p_organization: input!.organization,
+              p_email: input!.contact_email,
+              p_meal: input!.meal_preference,
+            })
+          : await client.rpc("submit_event_application_details", {
+              p_user: user,
+              p_event: id,
+              p_name: input?.name ?? "",
+              p_organization: input?.organization ?? "",
+              p_email: input?.contact_email ?? "",
+              p_cancel: req.method === "DELETE",
+              p_meal: input?.meal_preference ?? "不需餐盒",
+            });
       if (r.error) {
         const code = [
           "EVENT_NOT_FOUND",
@@ -530,10 +623,22 @@ export default async function handler(req: Request, context?: { ip?: string }) {
           "EVENT_CANCELLED",
           "REGISTRATION_CLOSED",
           "EVENT_FULL",
+          "REGISTRATION_CONFLICT",
+          "REGISTRATION_ALREADY_CHECKED_IN",
+          "REGISTRATION_NOT_ACTIVE",
+          "INVALID_REGISTRATION_IDENTITY",
+          "ORGANIZATION_NOT_ELIGIBLE",
         ].find((c) => r.error.message.includes(c));
         if (code)
           throw new HttpError(code === "EVENT_NOT_FOUND" ? 404 : 409, code);
       }
+      return json(checked(r));
+    }
+    if (child === "availability") {
+      if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const r = await client.rpc("public_event_availability", { p_event: id });
+      if (r.error?.message.includes("EVENT_NOT_FOUND"))
+        throw new HttpError(404, "EVENT_NOT_FOUND");
       return json(checked(r));
     }
     if (child && child !== "calendar") throw new HttpError(404, "NOT_FOUND");
@@ -560,6 +665,8 @@ export default async function handler(req: Request, context?: { ip?: string }) {
     if (e instanceof z.ZodError)
       return json({ code: "VALIDATION_ERROR", issues: e.flatten() }, 400);
     // Upstream/network exceptions can include request headers; never log them.
-    return fail(e instanceof HttpError ? e : new Error("Events API request failed"));
+    return fail(
+      e instanceof HttpError ? e : new Error("Events API request failed"),
+    );
   }
 }

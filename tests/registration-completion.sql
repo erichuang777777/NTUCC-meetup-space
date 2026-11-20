@@ -1,0 +1,41 @@
+begin;
+insert into auth.users(id,email) values('d1000000-0000-4000-8000-000000000001','member@example.test');
+insert into public_events(id,title,starts_at,ends_at,registration_closes_at,capacity,is_published) values
+('d2000000-0000-4000-8000-000000000001','registration completion',now()+interval '2 days',now()+interval '3 days',now()+interval '1 day',10,true),
+('d2000000-0000-4000-8000-000000000002','unpublished',now()+interval '2 days',now()+interval '3 days',now()+interval '1 day',10,false);
+do $$declare e uuid:='d2000000-0000-4000-8000-000000000001';u uuid:='d1000000-0000-4000-8000-000000000001';r jsonb;summary jsonb;ticket text:='ntucc_ticket_'||repeat('d',64);begin
+ perform register_guest_event_details(e,repeat('d',64),'Guest','臺大癌醫','GUEST@example.test',ticket,'素食');
+ perform register_guest_event_details(e,repeat('d',64),'Guest','臺大癌醫','guest@example.test',ticket,'素食');
+ begin perform register_guest_event_details(e,repeat('d',64),'Guest','臺大癌醫','guest@example.test',ticket,'葷食');raise exception 'meal retry changed';exception when others then if sqlerrm<>'IDEMPOTENCY_CONFLICT' then raise;end if;end;
+ begin perform register_guest_event_details(e,repeat('e',64),'Other','臺大','guest@example.test','ntucc_ticket_'||repeat('e',64),'葷食');raise exception 'duplicate accepted';exception when others then if sqlerrm<>'REGISTRATION_CONFLICT' then raise;end if;end;
+ begin perform submit_event_application_details(u,e,'Member','臺大','Guest@example.test',false,'葷食');raise exception 'cross-channel duplicate accepted';exception when others then if sqlerrm<>'REGISTRATION_CONFLICT' then raise;end if;end;
+ perform submit_event_application_details(u,e,'Member','臺大','member@example.test',false,'葷食');
+ r:=public_event_availability(e);
+ if (r->>'registered')::int<>2 or (r->>'remaining')::int<>8 then raise exception 'availability incorrect';end if;
+ summary:=event_registration_summary(e);
+ if (summary->>'guest')::int<>1 or (summary->>'member')::int<>1 or (summary->'meals'->>'素食')::int<>1 then raise exception 'summary incorrect';end if;
+ begin perform update_event_registration(e,null,repeat('a',64),'Intruder','臺大','changed@example.test','葷食');raise exception 'wrong capability accepted';exception when others then if sqlerrm<>'INVALID_REGISTRATION_IDENTITY' then raise;end if;end;
+ begin perform update_event_registration(e,u,repeat('d',64),'Intruder','臺大','changed@example.test','葷食');raise exception 'ambiguous identity accepted';exception when others then if sqlerrm<>'INVALID_REGISTRATION_IDENTITY' then raise;end if;end;
+ begin perform update_event_registration(e,null,repeat('d',64),'Guest','Other','guest@example.test','葷食');raise exception 'organization bypass';exception when others then if sqlerrm<>'ORGANIZATION_NOT_ELIGIBLE' then raise;end if;end;
+ begin perform update_event_registration(e,null,repeat('d',64),'Guest','臺大','member@example.test','葷食');raise exception 'edit duplicate accepted';exception when others then if sqlerrm<>'REGISTRATION_CONFLICT' then raise;end if;end;
+ perform update_event_registration(e,null,repeat('d',64),'Corrected guest','臺大醫院','new@example.test','葷食');
+ r:=access_guest_event(e,repeat('d',64));
+ if r->>'applicant_name'<>'Corrected guest' or r->>'meal_preference'<>'葷食' or r->'ticket'->>'token'<>ticket then raise exception 'edit lost details or ticket';end if;
+ perform update_event_registration(e,u,null,'Corrected member','臺大','member@example.test','不需餐盒');
+ update event_registrations set checked_in_at=now() where event_id=e and user_id=u;
+ begin perform update_event_registration(e,u,null,'Member','臺大','member@example.test','葷食');raise exception 'checked-in edit accepted';exception when others then if sqlerrm<>'REGISTRATION_ALREADY_CHECKED_IN' then raise;end if;end;
+ begin perform submit_event_application_details(u,e,'Corrected member','臺大','member@example.test',false,'素食');raise exception 'POST bypass checked-in restriction';exception when others then if sqlerrm<>'REGISTRATION_ALREADY_CHECKED_IN' then raise;end if;end;
+ update public_events set registration_closes_at=now()-interval '1 second' where id=e;
+ r:=access_guest_event(e,repeat('d',64));
+ if (r->>'can_edit')::boolean then raise exception 'late edit UI enabled';end if;
+ begin perform update_event_registration(e,null,repeat('d',64),'Guest','臺大','new@example.test','素食');raise exception 'late edit accepted';exception when others then if sqlerrm<>'REGISTRATION_CLOSED' then raise;end if;end;
+ perform access_guest_event(e,repeat('d',64),true);
+ summary:=event_registration_summary(e);
+ if (summary->>'guest')::int<>0 or (summary->>'checked_in')::int<>1 or (summary->'meals'->>'葷食')::int<>0 then raise exception 'cancelled counted';end if;
+ begin perform public_event_availability('d2000000-0000-4000-8000-000000000002');raise exception 'draft leaked';exception when others then if sqlerrm<>'EVENT_NOT_FOUND' then raise;end if;end;
+ r:=event_registration_export(e);
+ if jsonb_array_length(r)<>1 or (r->0) ? 'guest_token_hash' or (r->0) ? 'ticket_token' then raise exception 'export leaks credentials or includes cancelled records';end if;
+ if has_function_privilege('anon','public.event_registration_export(uuid)','execute') then raise exception 'export privilege';end if;
+ if has_function_privilege('anon','public.event_registration_summary(uuid)','execute') or has_function_privilege('authenticated','public.update_event_registration(uuid,uuid,text,text,text,text,text)','execute') then raise exception 'direct RPC privilege';end if;
+end$$;
+rollback;

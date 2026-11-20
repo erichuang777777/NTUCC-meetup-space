@@ -56,7 +56,11 @@ test("public event API is allowlisted; verified external users can act only for 
       email_confirmed_at: confirmed ? "2026-01-01" : null,
       is_anonymous: anonymous,
     };
-    if (path === "/auth/v1/user") return send(user);
+    if (path === "/auth/v1/user") {
+      if (req.headers.authorization?.startsWith("Bearer ntucc_event_"))
+        return send({ message: "invalid JWT" }, 401);
+      return send(user);
+    }
     if (path === `/auth/v1/admin/users/${U}`) return send({ user });
     if (
       url.pathname === "/rest/v1/profiles" &&
@@ -96,8 +100,24 @@ test("public event API is allowlisted; verified external users can act only for 
           : null,
       );
     }
+    if (path === "/rest/v1/rpc/public_event_availability")
+      return send({ registered: 1, remaining: 29 });
+    if (path === "/rest/v1/rpc/event_registration_export")
+      return send([
+        {
+          id: E,
+          applicant_name: "Export Test",
+          organization: "臺大",
+          contact_email: "test@example.test",
+          meal_preference: "素食",
+        },
+      ]);
+    if (path === "/rest/v1/rpc/event_registration_summary")
+      return send({ checked_in: 0, guest: 0, member: 1, meals: {} });
     if (path === "/rest/v1/rpc/consume_quota") return send(true);
-    if (path === "/rest/v1/rpc/submit_event_application")
+    if (path === "/rest/v1/rpc/update_event_registration")
+      return send({ status: "registered" });
+    if (path === "/rest/v1/rpc/submit_event_application_details")
       return send({
         id: E,
         status: data.p_cancel ? "cancelled" : "registered",
@@ -181,8 +201,25 @@ test("public event API is allowlisted; verified external users can act only for 
       ).status,
       200,
     );
+    assert.equal(
+      (
+        await req("/" + E + "/registration", "PATCH", "jwt", {
+          name: "同仁",
+          organization: "臺大",
+          contact_email: "personal@example.test",
+          meal_preference: "素食",
+        })
+      ).status,
+      200,
+    );
+    const update = calls.find(
+      (c) => c.path === "/rest/v1/rpc/update_event_registration",
+    )!;
+    assert.equal(update.data.p_user, U);
+    assert.equal(update.data.p_hash, null);
+    assert.equal(update.data.p_meal, "素食");
     const rpc = calls.find(
-      (c) => c.path === "/rest/v1/rpc/submit_event_application",
+      (c) => c.path === "/rest/v1/rpc/submit_event_application_details",
     )!;
     assert.equal(rpc.data.p_user, U);
     assert.equal(rpc.data.p_event, E);
@@ -202,7 +239,33 @@ test("public event API is allowlisted; verified external users can act only for 
       (await req("/manage/" + E, "GET", "ntucc_event_valid")).status,
       200,
     );
+    assert.equal(
+      (await req("/manage/" + E + "?export=registered", "GET", "jwt")).status,
+      403,
+    );
+    const availability = await req("/" + E + "/availability");
+    assert.equal(availability.status, 200);
+    assert.deepEqual(await availability.json(), {
+      registered: 1,
+      remaining: 29,
+    });
     admin = true;
+    const csv = await req("/manage/" + E + "?export=registered", "GET", "jwt");
+    assert.equal(csv.status, 200);
+    assert.match(csv.headers.get("content-type")!, /text\/csv/);
+    assert.equal(csv.headers.get("cache-control"), "no-store");
+    assert((await csv.text()).includes("Export Test"));
+    assert.notEqual(
+      (
+        await req(
+          "/manage/" + E + "?export=registered",
+          "GET",
+          "ntucc_event_valid",
+        )
+      ).status,
+      200,
+    );
+
     const roster = await req("/manage/" + E + "?page=1", "GET", "jwt");
     assert.equal(roster.status, 200);
     const rosterData = await roster.json();
