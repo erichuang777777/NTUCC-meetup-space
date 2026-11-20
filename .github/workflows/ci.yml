@@ -85,6 +85,8 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_series.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/023_member_hosted_events.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/member_hosted_events.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/024_event_archive.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_archive.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/025_global_search.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/global_search.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/026_admin_dashboard.sql

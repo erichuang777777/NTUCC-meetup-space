@@ -16,3 +16,4 @@ import "./participation_history";
 import "./global_search";
 import "./admin_dashboard";
 import "./email_notifications";
+import "./event_archive";
