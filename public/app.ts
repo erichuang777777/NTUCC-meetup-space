@@ -16,6 +16,7 @@ import {
 } from "./feature-registry";
 import "./features/index";
 import { reportAttrs } from "./features/content_reports";
+import { decoratePainPoints } from "./features/talk_proposals";
 const inviteFragment = location.hash.match(
   /^#invite=(ntucc_inv_[a-f0-9]{64})$/,
 );
@@ -1158,6 +1159,8 @@ function painView() {
           painView();
         })),
   );
+  if (isEnabled("talk_proposals"))
+    void decoratePainPoints($("#view"), featureCtx());
 }
 function formDialog(
   title: string,

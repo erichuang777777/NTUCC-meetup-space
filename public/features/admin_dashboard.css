@@ -1,0 +1,57 @@
+.dash-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: end;
+  margin: 12px 0;
+}
+.dash-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.dash-tile {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+}
+.dash-tile b {
+  display: block;
+  font-size: 1.5rem;
+}
+.dash-tile span {
+  font-size: 0.8125rem;
+  opacity: 0.75;
+}
+.dash-section {
+  margin-top: 20px;
+}
+.dash-section table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.dash-section th,
+.dash-section td {
+  text-align: left;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.dash-chart {
+  width: 100%;
+  max-width: 520px;
+  height: auto;
+  color: var(--brand, #2b6cb0);
+}
+.dash-tools {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+}
+.dash-lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}

@@ -66,6 +66,16 @@
 
 Migration 編號預先分配，平行開發不會撞號。
 
+## 2.1 實作狀態（15 / 15 已實作，flag 預設全部關閉）
+
+- 全部功能已完成並整合；每項的說明、權限與部署步驟見 `docs/features/<key>.md`。
+- 部署順序：Supabase 依序執行 013 → 028；Netlify 部署後，到管理後台「功能開關」逐項開啟驗收。
+- 已知限制與後續可做：
+  - `global_search` 以子字串比對，錯字不會命中；`event_archive` 尚未納入搜尋。
+  - `event_archive` 的相關展示以 id 貼上選取，尚無選擇器介面。
+  - `email_notifications` 需設定 `EMAIL_PROVIDER_URL`、`EMAIL_API_KEY`、`EMAIL_FROM` 才會真正寄出。
+  - 各功能 UI 僅以建置、型別檢查與示例預覽驗證，尚未對真實 Supabase 專案做端對端驗收。
+
 ### F1 站內通知中心 `notifications`
 - 頂部小鈴鐺＋未讀數；通知列表（分頁）、單筆／全部標為已讀。
 - 觸發來源（由各功能呼叫 `notify()`）：報名審核結果、活動前提醒、私訊、討論被回覆／@提及、候補遞補、投稿審核結果。

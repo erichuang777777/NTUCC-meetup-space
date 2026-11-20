@@ -5,6 +5,12 @@ import {
   guestAgentInstructions,
 } from "./guest-registration";
 import { registrationName } from "./event-registration-display";
+import {
+  waitlistLabel,
+  WAITLIST_NOTE,
+  waitlistField,
+  applyWaitlistRecord,
+} from "./features/event_waitlist";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import "./public-events.css";
 import { mountPhotoFrame } from "./event-photo-frame";
@@ -21,6 +27,7 @@ type Event = {
   ends_at: string;
   registration_closes_at: string;
   capacity: number;
+  waitlist_enabled?: boolean;
   status: string;
   is_published?: boolean;
   agenda?: { time: string; title: string; speaker?: string }[];
@@ -373,7 +380,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           const pages = Math.max(1, Math.ceil(roster.total / roster.page_size));
           const pageLink = (page: number) =>
             `#event-admin/${eventId}?page=${page}`;
-          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p>活動識別碼：<code class="public-roster-id">${esc(eventId)}</code></p><p>已報名 <strong>${esc(roster.registered)}</strong> 人 · 已取消 <strong>${esc(roster.cancelled)}</strong> 人 · 待補資料 ${esc(roster.pending ?? 0)} 人 · 未核可 ${esc(roster.rejected ?? 0)} 人 · 共 ${esc(roster.total)} 筆</p><p>僅供管理員辦理活動聯繫與報到使用，請勿公開或轉傳名單。姓名、服務單位及聯絡信箱由報名者自行填寫。單位包含「台大」即通過輕量關鍵字判定，並非身分證明，聯絡信箱不另行驗證。舊會員活動與餐盒資料不包含在內。</p>${roster.registrations.length ? `<div class="public-roster-scroll" role="region" aria-label="報名名單" tabindex="0"><table class="public-roster"><thead><tr><th scope="col">報名識別碼</th><th scope="col">報名者</th><th scope="col">資格判定</th><th scope="col">狀態</th><th scope="col">最後更新（台北）</th></tr></thead><tbody>${roster.registrations.map((r: { id: string; user_id: string; status: string; updated_at: string; display_name?: string | null; email?: string | null; applicant_name?: string | null; organization?: string; contact_email?: string; eligibility_status?: string; review_reason?: string }) => `<tr><td><code>${esc(r.id)}</code></td><td>${esc(registrationName(r))}<br>${esc(r.organization || "未填單位")}<br>${esc(r.contact_email || r.email || "未填信箱")}</td><td>${esc(({ approved: "符合關鍵字", rejected: "未符合關鍵字", pending: "待補資料" } as Record<string, string>)[r.eligibility_status || "pending"] || "未知")}</td><td>${esc(({ registered: "已報名", cancelled: "已取消", pending: "待補資料", rejected: "未核可" } as Record<string, string>)[r.status] || "未知狀態")}</td><td>${esc(date(r.updated_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>本頁沒有報名紀錄。</p>"}<nav class="public-roster-pages" aria-label="報名名單分頁">${roster.page > 1 ? `<a href="${esc(pageLink(roster.page - 1))}">上一頁</a>` : ""}<span>第 ${esc(roster.page)} 頁，共 ${esc(pages)} 頁（每頁 ${esc(roster.page_size)} 筆）</span>${roster.page < pages ? `<a href="${esc(pageLink(roster.page + 1))}">下一頁</a>` : ""}</nav>`;
+          content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p>活動識別碼：<code class="public-roster-id">${esc(eventId)}</code></p><p>已報名 <strong>${esc(roster.registered)}</strong> 人 · 已取消 <strong>${esc(roster.cancelled)}</strong> 人 · 待補資料 ${esc(roster.pending ?? 0)} 人 · 未核可 ${esc(roster.rejected ?? 0)} 人${roster.waitlisted !== undefined ? ` · 候補 ${esc(roster.waitlisted)} 人` : ""} · 共 ${esc(roster.total)} 筆</p><p>僅供管理員辦理活動聯繫與報到使用，請勿公開或轉傳名單。姓名、服務單位及聯絡信箱由報名者自行填寫。單位包含「台大」即通過輕量關鍵字判定，並非身分證明，聯絡信箱不另行驗證。舊會員活動與餐盒資料不包含在內。</p>${roster.registrations.length ? `<div class="public-roster-scroll" role="region" aria-label="報名名單" tabindex="0"><table class="public-roster"><thead><tr><th scope="col">報名識別碼</th><th scope="col">報名者</th><th scope="col">資格判定</th><th scope="col">狀態</th><th scope="col">最後更新（台北）</th></tr></thead><tbody>${roster.registrations.map((r: { id: string; user_id: string; status: string; updated_at: string; display_name?: string | null; email?: string | null; applicant_name?: string | null; organization?: string; contact_email?: string; eligibility_status?: string; review_reason?: string; waitlist_position?: number | null }) => `<tr><td><code>${esc(r.id)}</code></td><td>${esc(registrationName(r))}<br>${esc(r.organization || "未填單位")}<br>${esc(r.contact_email || r.email || "未填信箱")}</td><td>${esc(({ approved: "符合關鍵字", rejected: "未符合關鍵字", pending: "待補資料" } as Record<string, string>)[r.eligibility_status || "pending"] || "未知")}</td><td>${esc(({ registered: "已報名", cancelled: "已取消", pending: "待補資料", rejected: "未核可" } as Record<string, string>)[r.status] || (r.status === "waitlisted" ? waitlistLabel(r.waitlist_position) : "未知狀態"))}</td><td>${esc(date(r.updated_at))}</td></tr>`).join("")}</tbody></table></div>` : "<p>本頁沒有報名紀錄。</p>"}<nav class="public-roster-pages" aria-label="報名名單分頁">${roster.page > 1 ? `<a href="${esc(pageLink(roster.page - 1))}">上一頁</a>` : ""}<span>第 ${esc(roster.page)} 頁，共 ${esc(pages)} 頁（每頁 ${esc(roster.page_size)} 筆）</span>${roster.page < pages ? `<a href="${esc(pageLink(roster.page + 1))}">下一頁</a>` : ""}</nav>`;
         } catch (error) {
           if (!active()) return;
           content.innerHTML = `<a href="#event-admin">← 返回管理</a><h1>活動報名管理</h1><p role="alert">${esc(error instanceof Error ? error.message : "無法載入名單")}</p><button id="roster-retry">重試</button>`;
@@ -406,7 +413,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
                 .slice(0, 16)
             : "";
         const eventForm = (e?: Event) =>
-          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label><label>議程（每行：時間 | 主題 | 講者；講者可省略，最多 30 項）<textarea name="agenda" rows="5" placeholder="18:00 | 開場分享 | 講者姓名">${esc((e?.agenda ?? []).map((item) => [item.time, item.title, item.speaker ?? ""].join(" | ")).join("\n"))}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("報到開始（台北，可留空）", "checkin_opens_at", "datetime-local", local(e?.checkin_opens_at ?? "")).replace(" required", "")}${field("報到結束（台北，可留空）", "checkin_closes_at", "datetime-local", local(e?.checkin_closes_at ?? "")).replace(" required", "")}<p>報到時段請同時填入開始與結束；都留空時使用活動開始至結束時間。若 18:00 開始分享、17:30 先入場，請將報到開始另設為 17:30。</p>${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
+          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label><label>議程（每行：時間 | 主題 | 講者；講者可省略，最多 30 項）<textarea name="agenda" rows="5" placeholder="18:00 | 開場分享 | 講者姓名">${esc((e?.agenda ?? []).map((item) => [item.time, item.title, item.speaker ?? ""].join(" | ")).join("\n"))}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("報到開始（台北，可留空）", "checkin_opens_at", "datetime-local", local(e?.checkin_opens_at ?? "")).replace(" required", "")}${field("報到結束（台北，可留空）", "checkin_closes_at", "datetime-local", local(e?.checkin_closes_at ?? "")).replace(" required", "")}<p>報到時段請同時填入開始與結束；都留空時使用活動開始至結束時間。若 18:00 開始分享、17:30 先入場，請將報到開始另設為 17:30。</p>${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}${waitlistField(e?.waitlist_enabled)}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
         const announcementForm = (a?: any) =>
           `<form class="public-editor" data-kind="announcement">${a ? `<input type="hidden" name="id" value="${esc(a.id)}">` : ""}<h2>${a ? "編輯公告" : "新增公開公告草稿"}</h2>${field("標題", "title", "text", a?.title)}<label>內容<textarea name="content" required>${esc(a?.content)}</textarea></label><label class="check"><input name="is_published" type="checkbox" ${a?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存公告</button></form>`;
         content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}<div class="public-staff-editor" data-event-id="${esc(e.id)}"><label>工作人員帳號 UUID（需已通過院內驗證）<input class="staff-user-id" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label><button type="button" data-staff-method="POST">授權報到</button> <button type="button" data-staff-method="DELETE" class="secondary">撤銷報到權限</button></div><a href="#event-admin/${esc(e.id)}">查看報名名單與統計</a> · <a href="#event-checkin/${esc(e.id)}">現場報到</a>${e.is_published ? `<button type="button" data-unpublish="event" data-record-id="${esc(e.id)}" class="secondary">立即撤下公開活動</button>` : ""}</details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}${a.is_published ? `<button type="button" data-unpublish="announcement" data-record-id="${esc(a.id)}" class="secondary">立即撤下公開公告</button>` : ""}</details>`).join("")}`;
@@ -459,6 +466,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
               record.is_published = record.is_published === "on";
               if (form.dataset.kind === "event") {
                 record.capacity = Number(record.capacity);
+                applyWaitlistRecord(record);
                 const lines = String(record.agenda ?? "")
                   .split(/\r?\n/)
                   .map((line) => line.trim())
@@ -610,10 +618,13 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           const registered =
             reserved && registration?.eligibility_status === "approved";
           const rejected = registration?.status === "rejected";
+          const waitlisted = registration?.status === "waitlisted";
           const section = content.querySelector("#event-registration")!;
-          section.innerHTML = registered
-            ? '<p>你已報名成功。</p><button id="event-register" class="secondary">取消我的報名</button>'
-            : `${rejected ? "<p>很抱歉，本活動目前開放服務單位名稱包含「台大」的參與者。你填寫的單位未符合本次規則，若填寫有誤，可更正後重新送出。</p>" : needsDetails ? "<p>原報名名額已保留。請補齊姓名、服務單位與聯絡信箱即可取得 QR，不需取消重報；即使報名已截止仍可補齊。若填寫單位不符合規則，報名將不受理並釋出名額。</p>" : registration?.status === "pending" ? "<p>請補齊姓名、服務單位與聯絡信箱後完成報名，補齊前不提供報到 QR。</p>" : ""}${closed && !(needsDetails && e.status !== "cancelled") ? "<p>目前不開放報名。</p>" : `<form id="event-application" class="public-editor"><h2>活動報名</h2><p>請填寫真實資料。服務單位包含「台大」即通過本次輕量關鍵字判定，這不等同身分或任職證明。姓名、單位與聯絡信箱僅提供主辦方活動聯繫使用，不公開。</p><label>姓名<input name="name" required maxlength="100" value="${esc(registration?.applicant_name ?? "")}"></label><label>服務單位<input name="organization" required maxlength="200" value="${esc(registration?.organization ?? "")}"></label><label>聯絡信箱<input name="contact_email" type="email" required maxlength="254" value="${esc(registration?.contact_email ?? session.user.email ?? "")}"></label><p>可填個人信箱，不需與登入信箱一致；請確認可收信，本版不另外驗證聯絡信箱。</p><button id="event-register" type="submit">確認報名</button></form>`}`;
+          section.innerHTML = waitlisted
+            ? `<p><strong>${esc(waitlistLabel(registration.waitlist_position))}</strong></p><p>${WAITLIST_NOTE}</p><button id="event-register" class="secondary">取消候補</button>`
+            : registered
+              ? '<p>你已報名成功。</p><button id="event-register" class="secondary">取消我的報名</button>'
+              : `${rejected ? "<p>很抱歉，本活動目前開放服務單位名稱包含「台大」的參與者。你填寫的單位未符合本次規則，若填寫有誤，可更正後重新送出。</p>" : needsDetails ? "<p>原報名名額已保留。請補齊姓名、服務單位與聯絡信箱即可取得 QR，不需取消重報；即使報名已截止仍可補齊。若填寫單位不符合規則，報名將不受理並釋出名額。</p>" : registration?.status === "pending" ? "<p>請補齊姓名、服務單位與聯絡信箱後完成報名，補齊前不提供報到 QR。</p>" : ""}${closed && !(needsDetails && e.status !== "cancelled") ? "<p>目前不開放報名。</p>" : `<form id="event-application" class="public-editor"><h2>活動報名</h2><p>請填寫真實資料。服務單位包含「台大」即通過本次輕量關鍵字判定，這不等同身分或任職證明。姓名、單位與聯絡信箱僅提供主辦方活動聯繫使用，不公開。</p><label>姓名<input name="name" required maxlength="100" value="${esc(registration?.applicant_name ?? "")}"></label><label>服務單位<input name="organization" required maxlength="200" value="${esc(registration?.organization ?? "")}"></label><label>聯絡信箱<input name="contact_email" type="email" required maxlength="254" value="${esc(registration?.contact_email ?? session.user.email ?? "")}"></label><p>可填個人信箱，不需與登入信箱一致；請確認可收信，本版不另外驗證聯絡信箱。</p><button id="event-register" type="submit">確認報名</button></form>`}`;
           if (registered) {
             const ticketBox = document.createElement("div");
             ticketBox.className = "public-ticket";
@@ -654,7 +665,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
               : {};
             await api(
               `/${e.id}/registration`,
-              registered ? "DELETE" : "POST",
+              registered || waitlisted ? "DELETE" : "POST",
               payload,
             );
             if (active()) await render();

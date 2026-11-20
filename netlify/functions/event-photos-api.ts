@@ -96,6 +96,7 @@ async function publicPhoto(client: ReturnType<typeof db>, id: string) {
       .eq("publication_consent", true)
       .eq("audience", "public_web")
       .eq("public_events.is_published", true)
+      .eq("public_events.audience", "public")
       .maybeSingle(),
   );
 }
@@ -140,6 +141,7 @@ export default async function handler(req: Request) {
             .eq("publication_consent", true)
             .eq("audience", "public_web")
             .eq("public_events.is_published", true)
+            .eq("public_events.audience", "public")
             .order("created_at", { ascending: false })
             .order("id")
             .range((page - 1) * 25, page * 25 - 1),

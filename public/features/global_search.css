@@ -1,0 +1,66 @@
+.gs-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 40, 36, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 8vh 16px 16px;
+}
+.gs-panel {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  width: min(640px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  gap: 10px;
+}
+.gs-panel input[type="search"] {
+  width: 100%;
+}
+.gs-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.gs-chip {
+  font-size: 0.8125rem;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+.gs-chip[aria-pressed="true"] {
+  background: var(--green);
+  color: #fff;
+}
+.gs-results {
+  overflow-y: auto;
+}
+.gs-group h3 {
+  font-size: 0.875rem;
+  margin: 10px 0 4px;
+  color: #4d6560;
+}
+.gs-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 8px 4px;
+  cursor: pointer;
+}
+.gs-item:hover,
+.gs-item:focus-visible {
+  background: #f1f6f3;
+}
+.gs-item b {
+  display: block;
+}
+.gs-item small {
+  color: #5b716c;
+}
