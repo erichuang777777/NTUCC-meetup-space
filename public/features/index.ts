@@ -15,3 +15,4 @@ import "./member_hosted_events";
 import "./participation_history";
 import "./global_search";
 import "./admin_dashboard";
+import "./email_notifications";
