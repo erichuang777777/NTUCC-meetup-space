@@ -35,6 +35,14 @@ from = "/api/v1/event-series/*"
 to = "/.netlify/functions/event-series-api/:splat"
 status = 200
 [[redirects]]
+from = "/api/v1/hosted-events/*"
+to = "/.netlify/functions/hosted-events-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/hosted-events"
+to = "/.netlify/functions/hosted-events-api"
+status = 200
+[[redirects]]
 from = "/api/v1/agent/*"
 to = "/.netlify/functions/agent-api/:splat"
 status = 200
@@ -49,6 +57,14 @@ status = 200
 [[redirects]]
 from = "/api/v1/spaces"
 to = "/.netlify/functions/spaces-api"
+status = 200
+[[redirects]]
+from = "/api/v1/talk-proposals/*"
+to = "/.netlify/functions/talk-proposals-api/:splat"
+status = 200
+[[redirects]]
+from = "/api/v1/talk-proposals"
+to = "/.netlify/functions/talk-proposals-api"
 status = 200
 [[redirects]]
 from = "/api/*"

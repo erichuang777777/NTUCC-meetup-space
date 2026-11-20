@@ -192,7 +192,7 @@ export async function mountGuestRegistration(
       button.disabled = true;
       try {
         const data = await guestApi(id, "POST", payload, pending.get(id)!.key);
-        if (data.status !== "registered") {
+        if (data.status !== "registered" && data.status !== "waitlisted") {
           feedback(
             "很抱歉，本活動限服務單位包含「台大／臺大」的同仁報名。請確認單位填寫是否正確。",
           );

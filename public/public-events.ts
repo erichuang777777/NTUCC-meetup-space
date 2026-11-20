@@ -6,6 +6,12 @@ import {
   guestAgentInstructions,
 } from "./guest-registration";
 import { registrationName } from "./event-registration-display";
+import {
+  waitlistLabel,
+  WAITLIST_NOTE,
+  waitlistField,
+  applyWaitlistRecord,
+} from "./features/event_waitlist";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import "./public-events.css";
 import { mountPhotoFrame } from "./event-photo-frame";
@@ -22,6 +28,7 @@ type Event = {
   ends_at: string;
   registration_closes_at: string;
   capacity: number;
+  waitlist_enabled?: boolean;
   status: string;
   is_published?: boolean;
   agenda?: { time: string; title: string; speaker?: string }[];
@@ -434,7 +441,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
                 .slice(0, 16)
             : "";
         const eventForm = (e?: Event) =>
-          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label><label>議程（每行：時間 | 主題 | 講者；講者可省略，最多 30 項）<textarea name="agenda" rows="5" placeholder="18:00 | 開場分享 | 講者姓名">${esc((e?.agenda ?? []).map((item) => [item.time, item.title, item.speaker ?? ""].join(" | ")).join("\n"))}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("報到開始（台北，可留空）", "checkin_opens_at", "datetime-local", local(e?.checkin_opens_at ?? "")).replace(" required", "")}${field("報到結束（台北，可留空）", "checkin_closes_at", "datetime-local", local(e?.checkin_closes_at ?? "")).replace(" required", "")}<p>報到時段請同時填入開始與結束；都留空時使用活動開始至結束時間。若 18:00 開始分享、17:30 先入場，請將報到開始另設為 17:30。</p>${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
+          `<form class="public-editor" data-kind="event">${e ? `<input type="hidden" name="id" value="${esc(e.id)}">` : ""}<h2>${e ? "編輯活動" : "新增公開活動草稿"}</h2>${field("標題", "title", "text", e?.title)}<label>活動介紹<textarea name="description" required>${esc(e?.description)}</textarea></label><label>議程（每行：時間 | 主題 | 講者；講者可省略，最多 30 項）<textarea name="agenda" rows="5" placeholder="18:00 | 開場分享 | 講者姓名">${esc((e?.agenda ?? []).map((item) => [item.time, item.title, item.speaker ?? ""].join(" | ")).join("\n"))}</textarea></label>${field("地點（僅填可公開資訊）", "location", "text", e?.location)}${field("開始時間（台北）", "starts_at", "datetime-local", local(e?.starts_at ?? ""))}${field("結束時間（台北）", "ends_at", "datetime-local", local(e?.ends_at ?? ""))}${field("報名截止（台北）", "registration_closes_at", "datetime-local", local(e?.registration_closes_at ?? ""))}${field("報到開始（台北，可留空）", "checkin_opens_at", "datetime-local", local(e?.checkin_opens_at ?? "")).replace(" required", "")}${field("報到結束（台北，可留空）", "checkin_closes_at", "datetime-local", local(e?.checkin_closes_at ?? "")).replace(" required", "")}<p>報到時段請同時填入開始與結束；都留空時使用活動開始至結束時間。若 18:00 開始分享、17:30 先入場，請將報到開始另設為 17:30。</p>${field("人數上限", "capacity", "number", String(e?.capacity ?? 30))}${waitlistField(e?.waitlist_enabled)}<label>活動狀態<select name="status"><option value="scheduled" ${e?.status !== "cancelled" ? "selected" : ""}>正常舉辦</option><option value="cancelled" ${e?.status === "cancelled" ? "selected" : ""}>已取消</option></select></label><label class="check"><input name="is_published" type="checkbox" ${e?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存活動</button></form>`;
         const announcementForm = (a?: any) =>
           `<form class="public-editor" data-kind="announcement">${a ? `<input type="hidden" name="id" value="${esc(a.id)}">` : ""}<h2>${a ? "編輯公告" : "新增公開公告草稿"}</h2>${field("標題", "title", "text", a?.title)}<label>內容<textarea name="content" required>${esc(a?.content)}</textarea></label><label class="check"><input name="is_published" type="checkbox" ${a?.is_published ? "checked" : ""}>我已確認內容可對外公開</label><button>儲存公告</button></form>`;
         content.innerHTML = `<h1>公開內容管理</h1><p>這些內容與院內公布欄分開。既有院內活動、公告與報名不會自動搬到這裡。請勿放入個資、內部會議連結或未授權附件。活動變更後請另外通知已報名者，下載的行事曆不會自動同步。</p><details><summary>新增活動</summary>${eventForm()}</details><details><summary>新增公告</summary>${announcementForm()}</details>${data.events.map((e: Event) => `<details><summary>${esc(e.title)} · ${e.is_published ? "公開" : "草稿"}</summary>${eventForm(e)}<div class="public-staff-editor" data-event-id="${esc(e.id)}"><label>工作人員帳號 UUID（需已通過院內驗證）<input class="staff-user-id" type="text" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"></label><button type="button" data-staff-method="POST">授權報到</button> <button type="button" data-staff-method="DELETE" class="secondary">撤銷報到權限</button></div><a href="#event-admin/${esc(e.id)}">查看報名名單與統計</a> · <a href="#event-checkin/${esc(e.id)}">現場報到</a>${e.is_published ? `<button type="button" data-unpublish="event" data-record-id="${esc(e.id)}" class="secondary">立即撤下公開活動</button>` : ""}</details>`).join("")}${data.announcements.map((a: any) => `<details><summary>${esc(a.title)} · ${a.is_published ? "公開" : "草稿"}</summary>${announcementForm(a)}${a.is_published ? `<button type="button" data-unpublish="announcement" data-record-id="${esc(a.id)}" class="secondary">立即撤下公開公告</button>` : ""}</details>`).join("")}`;
@@ -487,6 +494,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
               record.is_published = record.is_published === "on";
               if (form.dataset.kind === "event") {
                 record.capacity = Number(record.capacity);
+                applyWaitlistRecord(record);
                 const lines = String(record.agenda ?? "")
                   .split(/\r?\n/)
                   .map((line) => line.trim())
@@ -645,6 +653,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
           const registered =
             reserved && registration?.eligibility_status === "approved";
           const rejected = registration?.status === "rejected";
+          const waitlisted = registration?.status === "waitlisted";
           const section = content.querySelector("#event-registration")!;
           section.innerHTML = registered
             ? '<p>你已報名成功。</p><button id="event-register" class="secondary">取消我的報名</button>'
@@ -714,7 +723,7 @@ export function mountPublicEvents(client: SupabaseClient | null) {
               : {};
             await api(
               `/${e.id}/registration`,
-              registered ? "DELETE" : "POST",
+              registered || waitlisted ? "DELETE" : "POST",
               payload,
             );
             if (active()) await render();

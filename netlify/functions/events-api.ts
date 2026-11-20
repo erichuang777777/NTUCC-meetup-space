@@ -12,6 +12,8 @@ import {
 import { body, checked, fail, HttpError, json } from "./shared/http.js";
 import { guard } from "./shared/pii-guard.js";
 import { eventCalendar } from "./shared/event-calendar.js";
+import { isFeatureEnabled } from "./shared/features.js";
+import { isMemberViewer } from "./shared/event-audience.js";
 const eventFields =
   "id,title,description,location,starts_at,ends_at,registration_closes_at,capacity,status,updated_at,sequence,checkin_opens_at,checkin_closes_at,agenda";
 const announcementFields = "id,title,content,created_at";
@@ -51,6 +53,8 @@ const eventSchema = z
     checkin_opens_at: z.iso.datetime({ offset: true }).nullable().optional(),
     checkin_closes_at: z.iso.datetime({ offset: true }).nullable().optional(),
     capacity: z.number().int().min(1).max(10000),
+    // Only persisted when the event_waitlist flag is on (stripped otherwise).
+    waitlist_enabled: z.boolean().optional(),
     status: z.enum(["scheduled", "cancelled"]),
     is_published: z.boolean(),
   })
@@ -131,6 +135,10 @@ export default async function handler(req: Request, context?: { ip?: string }) {
     const [id, child] = path;
     if (path.length > 2) throw new HttpError(404, "NOT_FOUND");
     const client = db();
+    const waitlistOn = await isFeatureEnabled(client, "event_waitlist");
+    const publicFields = (
+      waitlistOn ? `${eventFields},waitlist_enabled` : eventFields
+    ) as typeof eventFields;
     if (id === "manage") {
       const actor = (await authenticate(req))!;
       requireInteractive(actor);
@@ -219,7 +227,13 @@ export default async function handler(req: Request, context?: { ip?: string }) {
           });
         }
         const counts = await Promise.all(
-          ["registered", "cancelled", "pending", "rejected"].map((status) =>
+          [
+            "registered",
+            "cancelled",
+            "pending",
+            "rejected",
+            ...(waitlistOn ? ["waitlisted"] : []),
+          ].map((status) =>
             client
               .from("event_registrations")
               .select("id", { count: "exact", head: true })
@@ -249,16 +263,36 @@ export default async function handler(req: Request, context?: { ip?: string }) {
             ) ?? [])
           : [];
         const byId = new Map(profiles.map((p) => [p.id, p]));
+        const positions = new Map<string, number | null>();
+        if (waitlistOn)
+          await Promise.all(
+            rows
+              .filter((r: any) => r.status === "waitlisted")
+              .map(async (r: any) =>
+                positions.set(
+                  r.id,
+                  checked(
+                    await client.rpc("event_waitlist_position", {
+                      p_registration: r.id,
+                    }),
+                  ),
+                ),
+              ),
+          );
         return json({
           registrations: rows.map((r) => ({
             ...r,
             display_name: byId.get(r.user_id)?.display_name ?? null,
             email: byId.get(r.user_id)?.email ?? null,
+            ...(waitlistOn
+              ? { waitlist_position: positions.get(r.id) ?? null }
+              : {}),
           })),
           registered: counts[0].count ?? 0,
           cancelled: counts[1].count ?? 0,
           pending: counts[2].count ?? 0,
           rejected: counts[3].count ?? 0,
+          ...(waitlistOn ? { waitlisted: counts[4].count ?? 0 } : {}),
           total: counts.reduce((n, c) => n + (c.count ?? 0), 0),
           page,
           page_size: 50,
@@ -269,13 +303,19 @@ export default async function handler(req: Request, context?: { ip?: string }) {
       }
       if (req.method === "GET")
         return json({
-          events: checked(
-            await client
-              .from("public_events")
-              .select("*")
-              .order("starts_at", { ascending: false })
-              .limit(500),
-          ),
+          events: (
+            checked(
+              await client
+                .from("public_events")
+                .select("*")
+                .order("starts_at", { ascending: false })
+                .limit(500),
+            ) as any[]
+          ).map((e) => {
+            if (waitlistOn) return e;
+            const { waitlist_enabled: _w, ...rest } = e;
+            return rest;
+          }),
           announcements: checked(
             await client
               .from("public_announcements")
@@ -309,6 +349,8 @@ export default async function handler(req: Request, context?: { ip?: string }) {
         actor,
         "rest_api",
       );
+      if (input.kind === "event" && !waitlistOn)
+        delete (record as any).waitlist_enabled;
       await limited(actor.id, "public_event_manage", 30);
       const table =
         input.kind === "event" ? "public_events" : "public_announcements";
@@ -373,12 +415,16 @@ export default async function handler(req: Request, context?: { ip?: string }) {
     }
     if (!id) {
       if (req.method !== "GET") throw new HttpError(405, "METHOD_NOT_ALLOWED");
+      const audiences = (await isMemberViewer(req))
+        ? ["public", "members"]
+        : ["public"];
       return json({
         events: checked(
           await client
             .from("public_events")
-            .select(eventFields)
+            .select(publicFields)
             .eq("is_published", true)
+            .in("audience", audiences)
             .order("starts_at", { ascending: false })
             .limit(500),
         ),
@@ -630,7 +676,14 @@ export default async function handler(req: Request, context?: { ip?: string }) {
           "ORGANIZATION_NOT_ELIGIBLE",
         ].find((c) => r.error.message.includes(c));
         if (code)
-          throw new HttpError(code === "EVENT_NOT_FOUND" ? 404 : 409, code);
+          throw new HttpError(
+            code === "EVENT_NOT_FOUND"
+              ? 404
+              : code === "MEMBERS_ONLY"
+                ? 403
+                : 409,
+            code,
+          );
       }
       return json(checked(r));
     }
@@ -646,9 +699,13 @@ export default async function handler(req: Request, context?: { ip?: string }) {
     const event = checked(
       await client
         .from("public_events")
-        .select(eventFields)
+        .select(publicFields)
         .eq("id", id)
         .eq("is_published", true)
+        .in(
+          "audience",
+          (await isMemberViewer(req)) ? ["public", "members"] : ["public"],
+        )
         .maybeSingle(),
     );
     if (!event) throw new HttpError(404, "NOT_FOUND");

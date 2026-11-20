@@ -1,5 +1,6 @@
 import { registerFeature, type FeatureCtx } from "../feature-registry";
 import "./member_directory.css";
+import { renderParticipationBadge } from "./participation_history";
 
 type Member = {
   user_id: string;
@@ -118,7 +119,7 @@ async function render(root: HTMLElement, ctx: FeatureCtx) {
   }
 
   function card(m: Member) {
-    return `<article class="panel md-card"><div class="row"><div><h3>${esc(m.display_name)}</h3><span class="muted">${esc(m.department)}</span></div>${m.open_to_questions ? '<span class="badge orange">歡迎請教</span>' : ""}</div>${m.bio ? `<p>${esc(m.bio)}</p>` : ""}${m.open_to_questions && m.question_topics ? `<p class="sub">可請教：${esc(m.question_topics)}</p>` : ""}<div class="md-tags">${m.expertise_tags.map((x) => `<button type="button" class="md-chip" data-tag="${esc(x)}">${esc(x)}</button>`).join("")}</div><div class="actions"><button type="button" class="secondary" data-message="${esc(m.user_id)}" aria-label="私訊 ${esc(m.display_name)}">私訊</button></div></article>`;
+    return `<article class="panel md-card"><div class="row"><div><h3>${esc(m.display_name)}</h3><span class="muted">${esc(m.department)}</span></div>${m.open_to_questions ? '<span class="badge orange">歡迎請教</span>' : ""}</div>${m.bio ? `<p>${esc(m.bio)}</p>` : ""}${m.open_to_questions && m.question_topics ? `<p class="sub">可請教：${esc(m.question_topics)}</p>` : ""}<div class="md-tags">${m.expertise_tags.map((x) => `<button type="button" class="md-chip" data-tag="${esc(x)}">${esc(x)}</button>`).join("")}</div><div class="md-participation" data-participation="${esc(m.user_id)}"></div><div class="actions"><button type="button" class="secondary" data-message="${esc(m.user_id)}" aria-label="私訊 ${esc(m.display_name)}">私訊</button></div></article>`;
   }
 
   function editor() {
@@ -160,6 +161,13 @@ async function render(root: HTMLElement, ctx: FeatureCtx) {
         tag = "";
         void ctx.run(reload);
       };
+    // Opt-in aggregate counts (F14); renders nothing unless both flags are on and the member opted in.
+    root
+      .querySelectorAll<HTMLElement>("[data-participation]")
+      .forEach(
+        (el) =>
+          void renderParticipationBadge(el, el.dataset.participation!, ctx),
+      );
     root
       .querySelectorAll<HTMLElement>("[data-message]")
       .forEach((b) => (b.onclick = () => ctx.openMessage(b.dataset.message!)));

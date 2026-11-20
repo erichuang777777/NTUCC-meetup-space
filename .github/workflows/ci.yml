@@ -76,6 +76,11 @@ jobs:
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/content_reports.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/019_forum_plus.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/forum_plus.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/020_event_waitlist.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_waitlist.sql
+          PGHOST=localhost PGUSER=postgres PGDATABASE=postgres bash tests/event-waitlist-concurrency.sh
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/021_talk_proposals.sql
+          psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/talk_proposals.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/022_event_series.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f tests/event_series.sql
           psql -h localhost -U postgres -v ON_ERROR_STOP=1 -f supabase/migrations/029_registration_completion.sql
